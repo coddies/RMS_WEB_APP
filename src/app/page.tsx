@@ -1,0 +1,2 @@
+import Link from "next/link";
+export default function Home() { return <main className="center-page"><section className="panel"><p className="eyebrow">Restaurant ordering</p><h1>Start with a table QR</h1><p className="muted">Customer menu example: <code>/menu?tenant=demo&amp;table=T-05&amp;type=dinein</code></p><Link className="button" href="/menu?tenant=demo&table=T-05&type=dinein">Open customer menu</Link><p><Link href="/login">Staff sign in</Link></p></section></main>; }

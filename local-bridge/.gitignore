@@ -1,0 +1,6 @@
+# Local bridge environment and data
+.env
+.env.*
+!.env.example
+data/
+*.log

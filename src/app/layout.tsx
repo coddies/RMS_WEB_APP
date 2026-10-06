@@ -1,0 +1,4 @@
+import type { Metadata } from "next";
+import "./styles.css";
+export const metadata: Metadata = { title: "Table Order", description: "Restaurant dine-in ordering" };
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="en"><body>{children}</body></html>; }

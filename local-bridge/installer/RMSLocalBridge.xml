@@ -1,0 +1,19 @@
+<service>
+  <id>RMSLocalBridge</id>
+  <name>RMS Local Bridge</name>
+  <description>Restaurant local menu cache, offline order queue, and printer bridge.</description>
+  <executable>%BASE%\runtime\node.exe</executable>
+  <arguments>"%BASE%\server.mjs"</arguments>
+  <workingdirectory>%BASE%</workingdirectory>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  <serviceaccount>
+    <username>NT AUTHORITY\LocalService</username>
+  </serviceaccount>
+  <hidewindow>true</hidewindow>
+  <logpath>%BASE%\logs</logpath>
+  <log mode="roll" />
+  <onfailure action="restart" delay="5 sec" />
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>15sec</stoptimeout>
+</service>
