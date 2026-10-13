@@ -5,15 +5,35 @@
   <executable>%BASE%\runtime\node.exe</executable>
   <arguments>"%BASE%\server.mjs"</arguments>
   <workingdirectory>%BASE%</workingdirectory>
-  <startmode>Automatic</startmode>
-  <delayedAutoStart>true</delayedAutoStart>
+  <!--
+    Security: NT AUTHORITY\LocalService (least-privilege).
+    configure.ps1 grants LocalService:
+      .env          Read-only   (BRIDGE_TOKEN, keys)
+      server.mjs    Read+Execute
+      runtime\      Read+Execute (node.exe)
+      data\         Modify       (SQLite WAL)
+      logs\         Modify       (WinSW log files)
+    SYSTEM and Administrators retain Full Control for management.
+  -->
   <serviceaccount>
     <username>NT AUTHORITY\LocalService</username>
   </serviceaccount>
+  <!--
+    Inject RMS_COUNTER_INSTALL_ROOT so server.mjs can resolve .env from an
+    absolute path. LocalService profile has no user-profile env vars, so we
+    set this explicitly instead of relying on the working directory.
+  -->
+  <env name="RMS_COUNTER_INSTALL_ROOT" value="%BASE%"/>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
   <hidewindow>true</hidewindow>
   <logpath>%BASE%\logs</logpath>
-  <log mode="roll" />
+  <!-- Avoid renaming a protected log file during service start. -->
+  <log mode="append" />
+  <!-- Auto-restart on crash: 3 attempts with increasing delays, then reset after 1 hour. -->
   <onfailure action="restart" delay="5 sec" />
+  <onfailure action="restart" delay="15 sec" />
+  <onfailure action="restart" delay="30 sec" />
   <resetfailure>1 hour</resetfailure>
   <stoptimeout>15sec</stoptimeout>
 </service>

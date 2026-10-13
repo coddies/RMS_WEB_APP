@@ -41,7 +41,7 @@ $form.Controls.Add((New-Label 'Restaurant Pairing Key' 20 20))
 $pairingKeyBox = New-TextBox 20 45 430 $true
 $configPath = Join-Path $InstallDir '.env'
 if (Test-Path -LiteralPath $configPath) {
-  $existingPairingKey = Get-Content -LiteralPath $configPath | Where-Object { $_ -match '^RMS_LICENSE_KEY=(rms_[a-f0-9]{64})$' } | Select-Object -First 1
+  $existingPairingKey = Get-Content -LiteralPath $configPath | Where-Object { $_ -match '^RMS_LICENSE_KEY=((?:rms_[a-f0-9]{64}|[A-Z0-9\-_@]{10}))$' } | Select-Object -First 1
   if ($existingPairingKey -match '^RMS_LICENSE_KEY=(.+)$') { $pairingKeyBox.Text = $Matches[1] }
 }
 $form.Controls.Add($pairingKeyBox)
@@ -80,8 +80,8 @@ $saveButton.Add_Click({
     if (-not [Uri]::TryCreate($WebAppUrl.Trim().TrimEnd('/'), [UriKind]::Absolute, [ref]$parsedWebUrl) -or $parsedWebUrl.Scheme -ne 'https') {
       throw 'The installer does not contain a valid HTTPS Vercel production URL.'
     }
-    if ($licenseKey -notmatch '^rms_[a-f0-9]{64}$') {
-      throw 'Enter the complete restaurant Pairing Key supplied by your RMS administrator.'
+    if ($licenseKey -notmatch '^rms_[a-f0-9]{64}$' -and $licenseKey -notmatch '^[A-Z0-9\-_@]{10}$') {
+      throw 'Enter the complete 10-character or legacy restaurant Pairing Key supplied by your RMS administrator.'
     }
 
     $fingerprintSource = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography' -Name MachineGuid -ErrorAction Stop).MachineGuid
@@ -152,7 +152,7 @@ $saveButton.Add_Click({
     if ($LASTEXITCODE -ne 0) { throw 'Could not grant the Windows service access to its local database folder.' }
     & $icacls $logsPath '/inheritance:r' '/grant:r' 'NT AUTHORITY\LOCAL SERVICE:(OI)(CI)M' 'BUILTIN\Administrators:(OI)(CI)F' 'NT AUTHORITY\SYSTEM:(OI)(CI)F' '/T' '/C' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Could not grant the Windows service access to its log folder.' }
-    & $icacls $configPath '/inheritance:r' '/grant:r' 'NT AUTHORITY\LOCAL SERVICE:R' 'BUILTIN\Administrators:F' 'NT AUTHORITY\SYSTEM:F' | Out-Null
+    & $icacls $configPath '/inheritance:r' '/grant:r' 'NT AUTHORITY\LOCAL SERVICE:R' 'BUILTIN\Administrators:F' 'NT AUTHORITY\SYSTEM:F' 'BUILTIN\Users:R' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Could not protect the bridge configuration file.' }
 
     $form.Tag = $bridgeToken

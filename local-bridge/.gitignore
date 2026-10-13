@@ -2,5 +2,7 @@
 .env
 .env.*
 !.env.example
+# Generated per-install desktop settings (may contain public connection settings).
+counter-config.json
 data/
 *.log

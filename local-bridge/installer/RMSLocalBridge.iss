@@ -13,14 +13,15 @@
 #if SupabaseProjectUrl == "" || SupabasePublishableKey == "" || WebAppUrl == ""
   #error "Set RMS_BUILD_SUPABASE_URL, RMS_BUILD_SUPABASE_PUBLISHABLE_KEY, and RMS_BUILD_WEB_APP_URL when building the installer."
 #endif
-#define BridgeVersion "1.1.0"
+#define BridgeVersion "1.1.4"
 
 [Setup]
 AppId={{7F248C1E-A725-4C0B-A9D3-1F1254309B12}
 AppName=RMS Local Bridge
 AppVersion={#BridgeVersion}
 AppPublisher=Restaurant Management System
-DefaultDirName={autopf}\RMS Local Bridge
+DefaultDirName=Z:\restaurant  management system\test-install
+UsePreviousAppDir=no
 DisableDirPage=no
 DefaultGroupName=RMS Local Bridge
 DisableProgramGroupPage=yes
@@ -28,7 +29,7 @@ PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64compatible
 ArchitecturesAllowed=x64compatible
 OutputDir={#OutputDir}
-OutputBaseFilename=RMSLocalBridgeSetup
+OutputBaseFilename=RMSLocalBridgeSetup-1.1.5
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -47,21 +48,27 @@ Source: "{#PayloadDir}\service\RMSLocalBridge.exe"; DestDir: "{app}"; Flags: ign
 Source: "{#SourceRoot}\installer\RMSLocalBridge.xml"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}\installer\configure.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "{#PayloadDir}\service\WinSW-LICENSE.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+; Native counter host — compiled C# launcher (no PowerShell/console window visible to user)
+Source: "{#SourceRoot}\desktop-app\dist\RMSCounter.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceRoot}\desktop-app\dist\RMSCounter.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
 Name: "{app}\data"
 Name: "{app}\logs"
 
 [Icons]
-Name: "{group}\RMS Counter"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\counter-app.ps1"""; WorkingDir: "{app}"
-Name: "{autodesktop}\RMS Counter"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\counter-app.ps1"""; WorkingDir: "{app}"; Tasks: desktopicon
+; RMSCounter.exe is a compiled C# host — it starts the bridge (if needed) and
+; runs the WPF UI in-process. No PowerShell or console window is ever shown.
+Name: "{group}\RMS Counter"; Filename: "{app}\RMSCounter.exe"; WorkingDir: "{app}"; IconFilename: "{app}\RMSCounter.ico"
+Name: "{autodesktop}\RMS Counter"; Filename: "{app}\RMSCounter.exe"; WorkingDir: "{app}"; IconFilename: "{app}\RMSCounter.ico"; Tasks: desktopicon
 Name: "{group}\Uninstall RMS Local Bridge"; Filename: "{uninstallexe}"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut for RMS Counter"; GroupDescription: "Additional shortcuts:"
 
 [Run]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\counter-app.ps1"""; WorkingDir: "{app}"; Flags: postinstall nowait runasoriginaluser; Description: "Launch RMS Counter"
+; Launch the native C# counter host after install — no console window shown.
+Filename: "{app}\RMSCounter.exe"; WorkingDir: "{app}"; Flags: postinstall nowait runasoriginaluser; Description: "Launch RMS Counter"
 
 [UninstallRun]
 Filename: "{app}\RMSLocalBridge.exe"; Parameters: "stop"; Flags: runhidden waituntilterminated; RunOnceId: "StopRMSLocalBridge"
@@ -100,8 +107,8 @@ begin
     exit;
 
   RunAndCheck(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\installer\configure.ps1') + '" -InstallDir "' + ExpandConstant('{app}') + '" -SupabaseUrl "{#SupabaseProjectUrl}" -PublishableKey "{#SupabasePublishableKey}" -WebAppUrl "{#WebAppUrl}"',
-    'Supabase configuration was not completed. The service was not started.', SW_SHOW);
+    '-NoLogo -NoProfile -STA -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\installer\configure.ps1') + '" -InstallDir "' + ExpandConstant('{app}') + '" -SupabaseUrl "{#SupabaseProjectUrl}" -PublishableKey "{#SupabasePublishableKey}" -WebAppUrl "{#WebAppUrl}"',
+    'Supabase configuration was not completed. The service was not started.', SW_SHOWNORMAL);
 
   RunAndCheck(ExpandConstant('{app}\RMSLocalBridge.exe'), 'install',
     'Windows could not register the RMS Local Bridge service.', SW_HIDE);

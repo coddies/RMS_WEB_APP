@@ -25,6 +25,9 @@ local-bridge/installer/build-tools/
 local-bridge/installer/payload/
 local-bridge/installer/dist/
 local-bridge/installer/live-test/
+test-install/
+test-install-old/
+*.exe
 
 # OS and IDE temporary files
 .DS_Store

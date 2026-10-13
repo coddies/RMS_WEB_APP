@@ -1,6 +1,6 @@
 # RMS Local Bridge Windows installer
 
-The build creates `dist/RMSLocalBridgeSetup.exe`. It bundles a portable Node.js runtime and WinSW; the restaurant PC does not need Node.js or a terminal window.
+The build creates `dist/RMSLocalBridgeSetup-1.1.3.exe`. It bundles a portable Node.js runtime and WinSW; the restaurant PC does not need Node.js or a terminal window.
 
 ## Build the installer
 

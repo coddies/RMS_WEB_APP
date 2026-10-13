@@ -40,8 +40,27 @@ $env:RMS_BUILD_WEB_APP_URL = $parsedWebUrl.AbsoluteUri.TrimEnd('/')
 
 New-Item -ItemType Directory -Force -Path $toolsDir, $runtimeDir, $serviceDir, $distDir | Out-Null
 
+# ── Build native counter host (RMSCounter.exe) ────────────────────────────────
+# The .exe is a compiled C# launcher that runs the WPF UI without showing a
+# PowerShell or console window. Build it fresh so the installer always bundles
+# the latest version.
+$desktopAppDir   = Join-Path $bridgeDir 'desktop-app'
+$counterExeSrc   = Join-Path $desktopAppDir 'dist\RMSCounter.exe'
+$counterIcoSrc   = Join-Path $desktopAppDir 'dist\RMSCounter.ico'
+$buildLocalApp   = Join-Path $desktopAppDir 'build-local-app.ps1'
+Write-Host 'Building native counter host (RMSCounter.exe)...'
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $buildLocalApp
+if ($LASTEXITCODE -ne 0) { throw 'Failed to compile RMSCounter.exe. Ensure .NET Framework 4.x is installed.' }
+if (-not (Test-Path -LiteralPath $counterExeSrc)) { throw "build-local-app.ps1 completed but RMSCounter.exe was not found at: $counterExeSrc" }
+Write-Host "Counter host ready: $counterExeSrc"
+# ─────────────────────────────────────────────────────────────────────────────
+
 if (-not $InnoSetupCompilerPath) {
   $InnoSetupCompilerPath = (Get-Command 'ISCC.exe' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source)
+}
+if (-not $InnoSetupCompilerPath -or -not (Test-Path -LiteralPath $InnoSetupCompilerPath)) {
+  $candidate = Join-Path $env:LOCALAPPDATA 'Programs\Antigravity IDE\resources\app\node_modules\innosetup\bin\ISCC.exe'
+  if (Test-Path -LiteralPath $candidate) { $InnoSetupCompilerPath = $candidate }
 }
 if (-not $InnoSetupCompilerPath -or -not (Test-Path -LiteralPath $InnoSetupCompilerPath)) {
   throw 'Inno Setup compiler not found. Install Inno Setup on a non-C: drive and pass -InnoSetupCompilerPath "<drive>:\path\ISCC.exe".'
@@ -109,6 +128,7 @@ $env:RMS_BUILD_SUPABASE_PUBLISHABLE_KEY = $null
 $env:RMS_BUILD_WEB_APP_URL = $null
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compiler failed with exit code $LASTEXITCODE." }
 
-$installer = Join-Path $distDir 'RMSLocalBridgeSetup.exe'
+$installer = Join-Path $distDir 'RMSLocalBridgeSetup-1.1.4.exe'
 if (-not (Test-Path -LiteralPath $installer)) { throw 'Compiler returned success but the installer executable was not created.' }
+Copy-Item -LiteralPath $installer -Destination (Join-Path $distDir 'RMSLocalBridgeSetup.exe') -Force
 Write-Host "Created installable package: $installer"
