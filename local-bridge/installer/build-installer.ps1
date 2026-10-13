@@ -59,6 +59,10 @@ if (-not $InnoSetupCompilerPath) {
   $InnoSetupCompilerPath = (Get-Command 'ISCC.exe' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source)
 }
 if (-not $InnoSetupCompilerPath -or -not (Test-Path -LiteralPath $InnoSetupCompilerPath)) {
+  $toolsCandidate = Join-Path $toolsDir 'innosetup\ISCC.exe'
+  if (Test-Path -LiteralPath $toolsCandidate) { $InnoSetupCompilerPath = $toolsCandidate }
+}
+if (-not $InnoSetupCompilerPath -or -not (Test-Path -LiteralPath $InnoSetupCompilerPath)) {
   $candidate = Join-Path $env:LOCALAPPDATA 'Programs\Antigravity IDE\resources\app\node_modules\innosetup\bin\ISCC.exe'
   if (Test-Path -LiteralPath $candidate) { $InnoSetupCompilerPath = $candidate }
 }
@@ -128,7 +132,7 @@ $env:RMS_BUILD_SUPABASE_PUBLISHABLE_KEY = $null
 $env:RMS_BUILD_WEB_APP_URL = $null
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compiler failed with exit code $LASTEXITCODE." }
 
-$installer = Join-Path $distDir 'RMSLocalBridgeSetup-1.1.4.exe'
+$installer = Join-Path $distDir 'RMSLocalBridgeSetup-1.1.5.exe'
 if (-not (Test-Path -LiteralPath $installer)) { throw 'Compiler returned success but the installer executable was not created.' }
 Copy-Item -LiteralPath $installer -Destination (Join-Path $distDir 'RMSLocalBridgeSetup.exe') -Force
 Write-Host "Created installable package: $installer"

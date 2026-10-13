@@ -13,14 +13,14 @@
 #if SupabaseProjectUrl == "" || SupabasePublishableKey == "" || WebAppUrl == ""
   #error "Set RMS_BUILD_SUPABASE_URL, RMS_BUILD_SUPABASE_PUBLISHABLE_KEY, and RMS_BUILD_WEB_APP_URL when building the installer."
 #endif
-#define BridgeVersion "1.1.4"
+#define BridgeVersion "1.1.5"
 
 [Setup]
 AppId={{7F248C1E-A725-4C0B-A9D3-1F1254309B12}
 AppName=RMS Local Bridge
 AppVersion={#BridgeVersion}
 AppPublisher=Restaurant Management System
-DefaultDirName=Z:\restaurant  management system\test-install
+DefaultDirName={autopf}\RMS Local Bridge
 UsePreviousAppDir=no
 DisableDirPage=no
 DefaultGroupName=RMS Local Bridge
