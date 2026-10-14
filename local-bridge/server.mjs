@@ -75,7 +75,7 @@ db.exec(`
     id TEXT PRIMARY KEY,
     username TEXT NOT NULL UNIQUE,
     pin_hash TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'cashier', 'kitchen')),
+    role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'cashier', 'kitchen', 'rider')),
     name TEXT NOT NULL,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
@@ -103,13 +103,60 @@ db.exec(`
     synced_at TEXT,
     error TEXT
   );
+  CREATE TABLE IF NOT EXISTS special_offers_cache (
+    id TEXT PRIMARY KEY,
+    menu_item_id TEXT,
+    title TEXT NOT NULL,
+    description TEXT,
+    badge_text TEXT,
+    card_style TEXT DEFAULT 'flame_badge',
+    days_of_week TEXT DEFAULT '1,2,3,4,5,6,7',
+    start_time TEXT,
+    end_time TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS inventory_cache (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    unit TEXT NOT NULL,
+    current_stock REAL NOT NULL DEFAULT 0,
+    minimum_threshold REAL NOT NULL DEFAULT 0,
+    cost_per_unit REAL NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS supply_products_cache (
+    id TEXT PRIMARY KEY,
+    category TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    image_url TEXT,
+    price REAL,
+    active INTEGER NOT NULL DEFAULT 1
+  );
+  CREATE TABLE IF NOT EXISTS settings_cache (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS stock_orders_cache (
+    id TEXT PRIMARY KEY,
+    items_json TEXT NOT NULL,
+    total_amount REAL,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    created_at TEXT NOT NULL,
+    synced_at TEXT
+  );
 `);
 
 for (const [column, definition] of [
   ["counter_status", "TEXT NOT NULL DEFAULT 'PENDING'"],
   ["payment_status", "TEXT NOT NULL DEFAULT 'PENDING'"],
   ["staff_id", "TEXT"],
-  ["staff_name", "TEXT"]
+  ["staff_name", "TEXT"],
+  ["rider_id", "TEXT"],
+  ["rider_name", "TEXT"]
 ]) {
   if (!db.prepare("PRAGMA table_info(offline_orders)").all().some((row) => row.name === column)) {
     db.exec(`ALTER TABLE offline_orders ADD COLUMN ${column} ${definition}`);
@@ -223,6 +270,9 @@ const server = createServer(async (request, response) => {
         if (requestedRole === "kitchen" && !["admin", "manager", "kitchen"].includes(user.role)) {
           return send(response, 403, { error: "This staff account does not have Kitchen access." });
         }
+        if (requestedRole === "rider" && !["admin", "manager", "rider"].includes(user.role)) {
+          return send(response, 403, { error: "This staff account does not have Rider access." });
+        }
       }
       const effectiveRole = requestedRole || user.role;
       const sessionData = {
@@ -247,6 +297,11 @@ const server = createServer(async (request, response) => {
       return send(response, 200, { staff: rows });
     }
 
+    if (request.method === "GET" && url.pathname === "/counter/riders") {
+      const riders = db.prepare("SELECT id, username, name, role FROM staff WHERE role = 'rider' AND active = 1 ORDER BY name").all();
+      return send(response, 200, { riders });
+    }
+
     if (request.method === "POST" && url.pathname === "/counter/staff") {
       const body = await readJson(request);
       const name = String(body.name || "").trim();
@@ -255,7 +310,7 @@ const server = createServer(async (request, response) => {
       const pin = body.pin ? String(body.pin).trim() : "";
       const active = body.active === undefined ? 1 : (body.active ? 1 : 0);
       if (!name || !username) throw new Error("Name and username are required.");
-      if (!["admin", "manager", "cashier", "kitchen"].includes(role)) throw new Error("Role must be admin, cashier, or kitchen.");
+      if (!["admin", "manager", "cashier", "kitchen", "rider"].includes(role)) throw new Error("Role must be admin, cashier, kitchen, or rider.");
       const existing = body.id ? db.prepare("SELECT * FROM staff WHERE id = ?").get(body.id) : null;
       const now = new Date().toISOString();
       let staffId = body.id;
@@ -492,6 +547,120 @@ const server = createServer(async (request, response) => {
       return send(response, 200, { marked_synced: body.synced.length });
     }
 
+    if (request.method === "POST" && url.pathname === "/counter/orders/assign-rider") {
+      const body = await readJson(request);
+      if (!body.client_order_id) throw new Error("Local client order ID is required.");
+      const riderId = body.rider_id || null;
+      const riderName = body.rider_name || null;
+      db.prepare("UPDATE offline_orders SET rider_id=?, rider_name=?, counter_status='READY' WHERE client_order_id=?")
+        .run(riderId, riderName, body.client_order_id);
+      enqueueGenericSync("rider_deliveries", body.client_order_id, "UPSERT", {
+        order_id: body.client_order_id,
+        rider_id: riderId,
+        status: "ASSIGNED"
+      });
+      return send(response, 200, { ok: true, assigned_rider: riderName });
+    }
+
+    // ── Special Offers Endpoints ────────────────────────────────────────────────
+    if (request.method === "GET" && url.pathname === "/counter/offers") {
+      const rows = db.prepare("SELECT * FROM special_offers_cache ORDER BY created_at DESC").all();
+      return send(response, 200, { offers: rows });
+    }
+
+    if (request.method === "POST" && url.pathname === "/counter/offers") {
+      const body = await readJson(request);
+      if (!body.title) throw new Error("Offer title is required.");
+      const id = body.id || randomUUID();
+      const now = new Date().toISOString();
+      db.prepare(`INSERT INTO special_offers_cache(id, menu_item_id, title, description, badge_text, card_style, days_of_week, start_time, end_time, active, created_at, updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET menu_item_id=excluded.menu_item_id, title=excluded.title, description=excluded.description, badge_text=excluded.badge_text, card_style=excluded.card_style, days_of_week=excluded.days_of_week, start_time=excluded.start_time, end_time=excluded.end_time, active=excluded.active, updated_at=excluded.updated_at`)
+        .run(id, body.menu_item_id || null, body.title.trim(), body.description || "", body.badge_text || "", body.card_style || "flame_badge", body.days_of_week || "1,2,3,4,5,6,7", body.start_time || null, body.end_time || null, body.active === false ? 0 : 1, now, now);
+      enqueueGenericSync("special_offers", id, "UPSERT", {
+        id,
+        menu_item_id: body.menu_item_id || null,
+        title: body.title,
+        description: body.description,
+        badge_text: body.badge_text,
+        card_style: body.card_style,
+        days_of_week: body.days_of_week,
+        start_time: body.start_time,
+        end_time: body.end_time,
+        active: body.active !== false
+      });
+      return send(response, 200, { ok: true, id });
+    }
+
+    if (request.method === "POST" && url.pathname === "/counter/offers/delete") {
+      const body = await readJson(request);
+      if (!body.id) throw new Error("Offer ID is required.");
+      db.prepare("DELETE FROM special_offers_cache WHERE id=?").run(body.id);
+      enqueueGenericSync("special_offers", body.id, "DELETE", { id: body.id });
+      return send(response, 200, { ok: true, id: body.id });
+    }
+
+    // ── Inventory Endpoints ─────────────────────────────────────────────────────
+    if (request.method === "GET" && url.pathname === "/counter/inventory") {
+      const items = db.prepare("SELECT * FROM inventory_cache ORDER BY name").all();
+      const settings = Object.fromEntries(db.prepare("SELECT key, value FROM settings_cache").all().map(r => [r.key, r.value]));
+      return send(response, 200, { items, vendor_phone: settings.vendor_phone || "03215555555" });
+    }
+
+    if (request.method === "POST" && url.pathname === "/counter/inventory/stock") {
+      const body = await readJson(request);
+      if (!body.id || body.current_stock === undefined) throw new Error("Inventory ID and new current_stock are required.");
+      const now = new Date().toISOString();
+      const newStock = Number(body.current_stock);
+      db.prepare("UPDATE inventory_cache SET current_stock=?, updated_at=? WHERE id=?").run(newStock, now, body.id);
+      enqueueGenericSync("raw_inventory", body.id, "PATCH", { current_stock: newStock });
+      return send(response, 200, { ok: true, id: body.id, current_stock: newStock });
+    }
+
+    // ── Supplier Marketplace Endpoints ──────────────────────────────────────────
+    if (request.method === "GET" && url.pathname === "/counter/marketplace") {
+      const products = db.prepare("SELECT * FROM supply_products_cache WHERE active = 1 ORDER BY category, name").all();
+      const settings = Object.fromEntries(db.prepare("SELECT key, value FROM settings_cache").all().map(r => [r.key, r.value]));
+      return send(response, 200, {
+        products,
+        supplier_phone: settings.supplier_marketplace_phone || "03129876543"
+      });
+    }
+
+    if (request.method === "POST" && url.pathname === "/counter/marketplace/order") {
+      const body = await readJson(request);
+      if (!Array.isArray(body.items) || !body.items.length) throw new Error("Order must contain at least one supply item.");
+      const id = randomUUID();
+      const now = new Date().toISOString();
+      db.prepare("INSERT INTO stock_orders_cache(id, items_json, total_amount, status, created_at) VALUES(?,?,?,?,?)")
+        .run(id, JSON.stringify(body.items), Number(body.total_amount || 0), "PENDING", now);
+      enqueueGenericSync("stock_orders", id, "UPSERT", {
+        id,
+        items: body.items,
+        total_amount: Number(body.total_amount || 0),
+        status: "PENDING"
+      });
+      return send(response, 201, { ok: true, order_id: id });
+    }
+
+    // ── Settings Endpoints ──────────────────────────────────────────────────────
+    if (request.method === "GET" && url.pathname === "/counter/settings") {
+      const rows = db.prepare("SELECT key, value FROM settings_cache").all();
+      const settings = Object.fromEntries(rows.map(r => [r.key, r.value]));
+      return send(response, 200, { settings });
+    }
+
+    if (request.method === "POST" && url.pathname === "/counter/settings") {
+      const body = await readJson(request);
+      const now = new Date().toISOString();
+      for (const [key, value] of Object.entries(body.settings || {})) {
+        db.prepare("INSERT INTO settings_cache(key, value, updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at")
+          .run(key, String(value), now);
+      }
+      enqueueGenericSync("tenants", "settings", "PATCH", body.settings);
+      return send(response, 200, { ok: true, settings: body.settings });
+    }
+
     if (request.method === "POST" && url.pathname === "/print") {
       const body = await readJson(request);
       const data = receiptBytes(body);
@@ -680,7 +849,7 @@ async function pullStaffFromCloud() {
         const hash = u.pin_hash || u.password_hash;
         if (!hash) continue;
         const username = u.username || u.phone || u.name.toLowerCase().replace(/\s+/g, "_");
-        const role = u.role === "rider" ? "cashier" : u.role;
+        const role = u.role;
         const existing = db.prepare("SELECT id FROM staff WHERE id = ? OR LOWER(username) = LOWER(?)").get(u.id, username);
         if (!existing) {
           db.prepare(`INSERT INTO staff(id, username, pin_hash, role, name, active, created_at, updated_at, cloud_synced_at)

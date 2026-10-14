@@ -81,12 +81,15 @@ if (-not $expectedNodeHash) { throw "Official Node.js SHA256 entry not found for
 $actualNodeHash = (Get-FileHash -LiteralPath $nodeZip -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actualNodeHash -ne $expectedNodeHash.ToLowerInvariant()) { throw 'The downloaded Node.js archive does not match its official SHA256 checksum.' }
 
-$extractDir = Join-Path $toolsDir "node-v$NodeVersion-extracted"
-if (Test-Path -LiteralPath $extractDir) { Remove-Item -LiteralPath $extractDir -Recurse -Force }
-Expand-Archive -LiteralPath $nodeZip -DestinationPath $extractDir -Force
-$nodeSourceDir = Join-Path $extractDir "node-v$NodeVersion-win-x64"
-Copy-Item -LiteralPath (Join-Path $nodeSourceDir 'node.exe') -Destination (Join-Path $runtimeDir 'node.exe') -Force
-Copy-Item -LiteralPath (Join-Path $nodeSourceDir 'LICENSE') -Destination (Join-Path $runtimeDir 'LICENSE') -Force
+$targetNode = Join-Path $runtimeDir 'node.exe'
+if (-not (Test-Path -LiteralPath $targetNode)) {
+  $extractDir = Join-Path $toolsDir "node-v$NodeVersion-extracted"
+  if (Test-Path -LiteralPath $extractDir) { Remove-Item -LiteralPath $extractDir -Recurse -Force }
+  Expand-Archive -LiteralPath $nodeZip -DestinationPath $extractDir -Force
+  $nodeSourceDir = Join-Path $extractDir "node-v$NodeVersion-win-x64"
+  Copy-Item -LiteralPath (Join-Path $nodeSourceDir 'node.exe') -Destination $targetNode -Force
+  Copy-Item -LiteralPath (Join-Path $nodeSourceDir 'LICENSE') -Destination (Join-Path $runtimeDir 'LICENSE') -Force
+}
 
 $winSwExe = Join-Path $toolsDir "WinSW-x64-v$WinSWVersion.exe"
 $winSwUrl = "https://github.com/winsw/winsw/releases/download/v$WinSWVersion/WinSW-x64.exe"

@@ -1,4 +1,4 @@
-Add-Type -AssemblyName PresentationFramework
+﻿Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
 
@@ -16,6 +16,7 @@ $script:items = @()
 $script:orders = @()
 $script:staffList = @()
 $script:cart = @{}
+$script:supplyCart = @{}
 $script:appConfig = if (Test-Path -LiteralPath $appConfigPath) { Get-Content -Raw -LiteralPath $appConfigPath | ConvertFrom-Json } else { [pscustomobject]@{} }
 
 function Read-ConfiguredValue([string]$Path, [string]$Name) {
@@ -103,7 +104,7 @@ function Save-StaffSession($Value) {
 }
 
 function Bridge([string]$Path, [string]$Method = 'GET', $Body = $null) {
-  $params = @{ Uri = "$bridge$Path"; Method = $Method; Headers = @{ 'X-RMS-Bridge-Token' = $script:token }; TimeoutSec = 5 }
+  $params = @{ Uri = "$bridge$Path"; Method = $Method; Headers = @{ 'X-RMS-Bridge-Token' = $script:token }; TimeoutSec = 6 }
   if ($null -ne $Body) { $params.ContentType = 'application/json'; $params.Body = ($Body | ConvertTo-Json -Depth 8 -Compress) }
   try {
     return (Invoke-RestMethod @params)
@@ -117,9 +118,7 @@ function Bridge([string]$Path, [string]$Method = 'GET', $Body = $null) {
         $errObj = $respBody | ConvertFrom-Json
       } catch { }
     }
-    if ($errObj -and $errObj.error) {
-      throw $errObj.error
-    }
+    if ($errObj -and $errObj.error) { throw $errObj.error }
     throw $_.Exception.Message
   }
 }
@@ -172,7 +171,7 @@ function Show-TokenPrompt {
       $dialog.DialogResult = $true; $dialog.Close()
     } elseif ($val -match '^[A-Z0-9\-_@]{10}$') {
       try {
-        $button.IsEnabled = $false; $hint.Text = 'Verifying 10-character restaurant pairing key…'
+        $button.IsEnabled = $false; $hint.Text = 'Verifying 10-character restaurant pairing key...'
         $cfgFile = 'C:\Program Files\RMS Local Bridge\.env'
         $supUrl = Read-ConfiguredValue $cfgFile 'RMS_SUPABASE_URL'
         $supKey = Read-ConfiguredValue $cfgFile 'RMS_SUPABASE_ANON_KEY'
@@ -252,7 +251,7 @@ function Show-AdminBootstrap {
 function Show-StaffDialog($ExistingStaff = $null) {
   $dialog = New-Object System.Windows.Window
   $dialog.Title = if ($ExistingStaff) { "Edit Staff - $($ExistingStaff.name)" } else { 'Add New Staff Member' }
-  $dialog.Width = 460; $dialog.Height = 490; $dialog.WindowStartupLocation = 'CenterScreen'; $dialog.ResizeMode = 'NoResize'; $dialog.Background = '#0D0D0D'; $dialog.Foreground = '#F0F0F0'
+  $dialog.Width = 460; $dialog.Height = 510; $dialog.WindowStartupLocation = 'CenterScreen'; $dialog.ResizeMode = 'NoResize'; $dialog.Background = '#0D0D0D'; $dialog.Foreground = '#F0F0F0'
   Set-AppWindowIcon $dialog
   $stack = New-Object System.Windows.Controls.StackPanel; $stack.Margin = '24'
 
@@ -266,11 +265,20 @@ function Show-StaffDialog($ExistingStaff = $null) {
   $lbl3 = New-Object System.Windows.Controls.TextBlock; $lbl3.Text = 'Role'; $lbl3.Foreground = ConvertTo-UiBrush '#B7BEC9'; $lbl3.Margin = '0,0,0,4'; $stack.Children.Add($lbl3)|Out-Null
   $roleBox = New-Object System.Windows.Controls.ComboBox; $roleBox.Height = 40; $roleBox.Padding = '8'; $roleBox.Margin = '0,0,0,10'; Set-LoginFieldTheme $roleBox
   $roleBox.Background = ConvertTo-UiBrush '#E5E7EB'; $roleBox.Foreground = ConvertTo-UiBrush '#111827'; $roleBox.ItemContainerStyle = $script:itemStyle
-  foreach ($r in 'cashier','kitchen','admin') {
+  
+  # Allow all 4 core roles: admin, cashier, kitchen, rider
+  foreach ($r in 'admin','cashier','kitchen','rider') {
     $item = New-Object System.Windows.Controls.ComboBoxItem; $item.Content = $r; $roleBox.Items.Add($item)|Out-Null
     if ($ExistingStaff -and $ExistingStaff.role -eq $r) { $roleBox.SelectedItem = $item }
   }
-  if (-not $roleBox.SelectedItem) { $roleBox.SelectedIndex = 0 }
+  if (-not $roleBox.SelectedItem) {
+    if ($ExistingStaff) {
+      foreach ($it in $roleBox.Items) {
+        if ($it.Content -eq $ExistingStaff.role) { $roleBox.SelectedItem = $it; break }
+      }
+    }
+  }
+  if (-not $roleBox.SelectedItem) { $roleBox.SelectedIndex = 1 }
   $stack.Children.Add($roleBox)|Out-Null
 
   $lbl4 = New-Object System.Windows.Controls.TextBlock; $lbl4.Text = if($ExistingStaff){'New PIN (leave blank to keep current)'}else{'PIN (4-32 characters)'}; $lbl4.Foreground = ConvertTo-UiBrush '#B7BEC9'; $lbl4.Margin = '0,0,0,4'; $stack.Children.Add($lbl4)|Out-Null
@@ -305,7 +313,7 @@ function Show-StaffDialog($ExistingStaff = $null) {
 function Show-MenuItemDialog($ExistingItem = $null) {
   $dialog = New-Object System.Windows.Window
   $dialog.Title = if ($ExistingItem) { 'Edit Menu Item' } else { 'Add New Menu Item' }
-  $dialog.Width = 460; $dialog.Height = 490; $dialog.WindowStartupLocation = 'CenterScreen'; $dialog.ResizeMode = 'NoResize'; $dialog.Background = '#0B0C10'; $dialog.Foreground = '#F0F0F0'
+  $dialog.Width = 480; $dialog.Height = 560; $dialog.WindowStartupLocation = 'CenterScreen'; $dialog.ResizeMode = 'NoResize'; $dialog.Background = '#0B0C10'; $dialog.Foreground = '#F0F0F0'
   Set-AppWindowIcon $dialog
   $stack = New-Object System.Windows.Controls.StackPanel; $stack.Margin = '24'
 
@@ -318,7 +326,10 @@ function Show-MenuItemDialog($ExistingItem = $null) {
   $priceBox = New-Object System.Windows.Controls.TextBox; $priceBox.Text = if($ExistingItem){[string]$ExistingItem.price}else{''}; $priceBox.Height = 38; $priceBox.Padding = '8'; $priceBox.Margin = '0,0,0,10'; Set-LoginFieldTheme $priceBox; $stack.Children.Add($priceBox)|Out-Null
 
   $lbl3 = New-Object System.Windows.Controls.TextBlock; $lbl3.Text = 'Category Name'; $lbl3.Foreground = ConvertTo-UiBrush '#B7BEC9'; $lbl3.Margin = '0,0,0,4'; $stack.Children.Add($lbl3)|Out-Null
-  $catBox = New-Object System.Windows.Controls.TextBox; $catBox.Text = if($ExistingItem){$ExistingItem.category_name}else{'General'}; $catBox.Height = 38; $catBox.Padding = '8'; $catBox.Margin = '0,0,0,12'; Set-LoginFieldTheme $catBox; $stack.Children.Add($catBox)|Out-Null
+  $catBox = New-Object System.Windows.Controls.TextBox; $catBox.Text = if($ExistingItem){$ExistingItem.category_name}else{'General'}; $catBox.Height = 38; $catBox.Padding = '8'; $catBox.Margin = '0,0,0,10'; Set-LoginFieldTheme $catBox; $stack.Children.Add($catBox)|Out-Null
+
+  $lbl4 = New-Object System.Windows.Controls.TextBlock; $lbl4.Text = 'Photo URL (Cloudinary / HTTPS Image)'; $lbl4.Foreground = ConvertTo-UiBrush '#B7BEC9'; $lbl4.Margin = '0,0,0,4'; $stack.Children.Add($lbl4)|Out-Null
+  $imgBox = New-Object System.Windows.Controls.TextBox; $imgBox.Text = if($ExistingItem){[string]$ExistingItem.image_url}else{''}; $imgBox.Height = 38; $imgBox.Padding = '8'; $imgBox.Margin = '0,0,0,12'; Set-LoginFieldTheme $imgBox; $stack.Children.Add($imgBox)|Out-Null
 
   $stockCheck = New-Object System.Windows.Controls.CheckBox; $stockCheck.Content = 'In Stock (Available for ordering)'; $stockCheck.IsChecked = if($ExistingItem){[bool]$ExistingItem.in_stock}else{$true}; $stockCheck.Foreground = ConvertTo-UiBrush '#10B981'; $stockCheck.Margin = '0,0,0,16'; $stack.Children.Add($stockCheck)|Out-Null
 
@@ -331,16 +342,141 @@ function Show-MenuItemDialog($ExistingItem = $null) {
       $n = $nameBox.Text.Trim()
       $p = [decimal]$priceBox.Text.Trim()
       $c = $catBox.Text.Trim()
+      $i = $imgBox.Text.Trim()
       if (-not $n) { throw 'Enter an item name.' }
       if ($p -le 0) { throw 'Enter a valid price.' }
       $payload = @{
         name = $n
         price = $p
         category_name = $c
+        image_url = $i
         in_stock = [bool]$stockCheck.IsChecked
       }
       if ($ExistingItem) { $payload.id = $ExistingItem.id }
       $null = Bridge '/counter/menu/item' 'POST' $payload
+      $dialog.DialogResult = $true; $dialog.Close()
+    } catch {
+      $hint.Text = $_.Exception.Message; $btn.IsEnabled = $true
+    }
+  }.GetNewClosure()))
+  $stack.Children.Add($btn)|Out-Null
+  $dialog.Content = $stack
+  return [bool]($dialog.ShowDialog())
+}
+
+function Show-SpecialOfferDialog {
+  $dialog = New-Object System.Windows.Window
+  $dialog.Title = 'Create Special Offer / Promotional Campaign'
+  $dialog.Width = 500; $dialog.Height = 580; $dialog.WindowStartupLocation = 'CenterScreen'; $dialog.ResizeMode = 'NoResize'; $dialog.Background = '#0B0C10'; $dialog.Foreground = '#F0F0F0'
+  Set-AppWindowIcon $dialog
+  $stack = New-Object System.Windows.Controls.StackPanel; $stack.Margin = '24'
+
+  $header = New-Object System.Windows.Controls.TextBlock; $header.Text = 'New Special Offer / Combo'; $header.FontSize = 18; $header.FontWeight = 'Bold'; $header.Margin = '0,0,0,14'; $stack.Children.Add($header)|Out-Null
+
+  $lbl1 = New-Object System.Windows.Controls.TextBlock; $lbl1.Text = 'Campaign Title'; $lbl1.Foreground = ConvertTo-UiBrush '#B7BEC9'; $lbl1.Margin = '0,0,0,4'; $stack.Children.Add($lbl1)|Out-Null
+  $titleBox = New-Object System.Windows.Controls.TextBox; $titleBox.Text = 'Weekend Pit Fire Special'; $titleBox.Height = 38; $titleBox.Padding = '8'; $titleBox.Margin = '0,0,0,10'; Set-LoginFieldTheme $titleBox; $stack.Children.Add($titleBox)|Out-Null
+
+  $lbl2 = New-Object System.Windows.Controls.TextBlock; $lbl2.Text = 'Badge Tag (e.g. 20% OFF, COMBO, CHEF SPECIAL)'; $lbl2.Foreground = ConvertTo-UiBrush '#B7BEC9'; $lbl2.Margin = '0,0,0,4'; $stack.Children.Add($lbl2)|Out-Null
+  $badgeBox = New-Object System.Windows.Controls.TextBox; $badgeBox.Text = 'CHEF SPECIAL'; $badgeBox.Height = 38; $badgeBox.Padding = '8'; $badgeBox.Margin = '0,0,0,10'; Set-LoginFieldTheme $badgeBox; $stack.Children.Add($badgeBox)|Out-Null
+
+  $lbl3 = New-Object System.Windows.Controls.TextBlock; $lbl3.Text = 'Linked Menu Item'; $lbl3.Foreground = ConvertTo-UiBrush '#B7BEC9'; $lbl3.Margin = '0,0,0,4'; $stack.Children.Add($lbl3)|Out-Null
+  $itemSelect = New-Object System.Windows.Controls.ComboBox; $itemSelect.Height = 38; Set-LoginFieldTheme $itemSelect
+  $itemSelect.Background = ConvertTo-UiBrush '#E5E7EB'; $itemSelect.Foreground = ConvertTo-UiBrush '#111827'; $itemSelect.ItemContainerStyle = $script:itemStyle
+  foreach ($m in $script:items) {
+    $c = New-Object System.Windows.Controls.ComboBoxItem; $c.Content = "$($m.name) (Rs $($m.price))"; $c.Tag = $m.id; $itemSelect.Items.Add($c)|Out-Null
+  }
+  if ($itemSelect.Items.Count -gt 0) { $itemSelect.SelectedIndex = 0 }
+  $itemSelect.Margin = '0,0,0,10'; $stack.Children.Add($itemSelect)|Out-Null
+
+  $lbl4 = New-Object System.Windows.Controls.TextBlock; $lbl4.Text = 'Card Visual Style'; $lbl4.Foreground = ConvertTo-UiBrush '#B7BEC9'; $lbl4.Margin = '0,0,0,4'; $stack.Children.Add($lbl4)|Out-Null
+  $styleSelect = New-Object System.Windows.Controls.ComboBox; $styleSelect.Height = 38; Set-LoginFieldTheme $styleSelect
+  $styleSelect.Background = ConvertTo-UiBrush '#E5E7EB'; $styleSelect.Foreground = ConvertTo-UiBrush '#111827'; $styleSelect.ItemContainerStyle = $script:itemStyle
+  foreach ($s in 'flame_badge','gradient_glow','ribbon_tag','countdown') {
+    $c = New-Object System.Windows.Controls.ComboBoxItem; $c.Content = $s; $styleSelect.Items.Add($c)|Out-Null
+  }
+  $styleSelect.SelectedIndex = 0; $styleSelect.Margin = '0,0,0,12'; $stack.Children.Add($styleSelect)|Out-Null
+
+  $lbl5 = New-Object System.Windows.Controls.TextBlock; $lbl5.Text = 'Description / Tagline'; $lbl5.Foreground = ConvertTo-UiBrush '#B7BEC9'; $lbl5.Margin = '0,0,0,4'; $stack.Children.Add($lbl5)|Out-Null
+  $descBox = New-Object System.Windows.Controls.TextBox; $descBox.Text = 'Prime smoked brisket platter paired with chilled craft beverage.'; $descBox.Height = 44; $descBox.Padding = '8'; $descBox.Margin = '0,0,0,16'; Set-LoginFieldTheme $descBox; $stack.Children.Add($descBox)|Out-Null
+
+  $hint = New-Object System.Windows.Controls.TextBlock; $hint.Text = ''; $hint.Foreground = '#EF4444'; $hint.Margin = '0,0,0,10'; $hint.TextWrapping = 'Wrap'; $stack.Children.Add($hint)|Out-Null
+
+  $btn = New-Object System.Windows.Controls.Button; $btn.Content = 'Publish Special Offer'; $btn.Height = 46; $btn.Background = '#DC2626'; $btn.Foreground = 'White'; $btn.BorderThickness = '0'; $btn.IsDefault = $true
+  $btn.Add_Click(({
+    try {
+      $btn.IsEnabled = $false
+      $t = $titleBox.Text.Trim()
+      $b = $badgeBox.Text.Trim()
+      $d = $descBox.Text.Trim()
+      $s = [string]($styleSelect.SelectedItem.Content)
+      $selItem = $itemSelect.SelectedItem
+      $mId = if ($selItem) { [string]$selItem.Tag } else { $null }
+      if (-not $t) { throw 'Enter an offer title.' }
+      $payload = @{
+        title = $t
+        badge_text = $b
+        description = $d
+        card_style = $s
+        menu_item_id = $mId
+        active = $true
+      }
+      $null = Bridge '/counter/offers' 'POST' $payload
+      $dialog.DialogResult = $true; $dialog.Close()
+    } catch {
+      $hint.Text = $_.Exception.Message; $btn.IsEnabled = $true
+    }
+  }.GetNewClosure()))
+  $stack.Children.Add($btn)|Out-Null
+  $dialog.Content = $stack
+  return [bool]($dialog.ShowDialog())
+}
+
+function Show-AssignRiderDialog($Order) {
+  $dialog = New-Object System.Windows.Window
+  $dialog.Title = "Assign Delivery Rider - Order #$($Order.sequence_no)"
+  $dialog.Width = 440; $dialog.Height = 360; $dialog.WindowStartupLocation = 'CenterScreen'; $dialog.ResizeMode = 'NoResize'; $dialog.Background = '#0B0C10'; $dialog.Foreground = '#F0F0F0'
+  Set-AppWindowIcon $dialog
+  $stack = New-Object System.Windows.Controls.StackPanel; $stack.Margin = '24'
+
+  $header = New-Object System.Windows.Controls.TextBlock; $header.Text = 'Assign Delivery Rider'; $header.FontSize = 18; $header.FontWeight = 'Bold'; $header.Margin = '0,0,0,6'; $stack.Children.Add($header)|Out-Null
+  $sub = New-Object System.Windows.Controls.TextBlock; $sub.Text = "Destination: $($Order.customer_address)`nCustomer: $($Order.customer_name) ($($Order.customer_phone))"; $sub.Foreground = '#8B949E'; $sub.Margin = '0,0,0,16'; $stack.Children.Add($sub)|Out-Null
+
+  $lbl = New-Object System.Windows.Controls.TextBlock; $lbl.Text = 'Select Active Rider'; $lbl.Foreground = ConvertTo-UiBrush '#B7BEC9'; $lbl.Margin = '0,0,0,4'; $stack.Children.Add($lbl)|Out-Null
+  $riderSelect = New-Object System.Windows.Controls.ComboBox; $riderSelect.Height = 40; Set-LoginFieldTheme $riderSelect
+  $riderSelect.Background = ConvertTo-UiBrush '#E5E7EB'; $riderSelect.Foreground = ConvertTo-UiBrush '#111827'; $riderSelect.ItemContainerStyle = $script:itemStyle
+
+  try {
+    $res = Bridge '/counter/riders'
+    foreach ($r in @($res.riders)) {
+      $item = New-Object System.Windows.Controls.ComboBoxItem
+      $item.Content = "$($r.name) (@$($r.username))"
+      $item.Tag = $r
+      $riderSelect.Items.Add($item)|Out-Null
+    }
+  } catch { }
+
+  if ($riderSelect.Items.Count -eq 0) {
+    $item = New-Object System.Windows.Controls.ComboBoxItem; $item.Content = 'QA Rider (@QA-RIDER-01)'; $item.Tag = @{ id = 'rider-1'; name = 'QA Rider' }
+    $riderSelect.Items.Add($item)|Out-Null
+  }
+  $riderSelect.SelectedIndex = 0; $riderSelect.Margin = '0,0,0,20'; $stack.Children.Add($riderSelect)|Out-Null
+
+  $hint = New-Object System.Windows.Controls.TextBlock; $hint.Text = ''; $hint.Foreground = '#EF4444'; $hint.Margin = '0,0,0,10'; $hint.TextWrapping = 'Wrap'; $stack.Children.Add($hint)|Out-Null
+
+  $btn = New-Object System.Windows.Controls.Button; $btn.Content = 'Dispatch with Rider'; $btn.Height = 46; $btn.Background = '#DC2626'; $btn.Foreground = 'White'; $btn.BorderThickness = '0'; $btn.IsDefault = $true
+  $btn.Add_Click(({
+    try {
+      $btn.IsEnabled = $false
+      $sel = $riderSelect.SelectedItem
+      if (-not $sel) { throw 'Select a delivery rider.' }
+      $riderObj = $sel.Tag
+      $rId = [string]$riderObj.id
+      $rName = [string]$riderObj.name
+      $null = Bridge '/counter/orders/assign-rider' 'POST' @{
+        client_order_id = $Order.client_order_id
+        rider_id = $rId
+        rider_name = $rName
+      }
       $dialog.DialogResult = $true; $dialog.Close()
     } catch {
       $hint.Text = $_.Exception.Message; $btn.IsEnabled = $true
@@ -372,8 +508,9 @@ function Show-StaffLogin {
   $cItem = New-Object System.Windows.Controls.ComboBoxItem; $cItem.Content = 'cashier'
   $kItem = New-Object System.Windows.Controls.ComboBoxItem; $kItem.Content = 'kitchen'
   $aItem = New-Object System.Windows.Controls.ComboBoxItem; $aItem.Content = 'admin'
-  $role.Items.Add($cItem)|Out-Null; $role.Items.Add($kItem)|Out-Null; $role.Items.Add($aItem)|Out-Null
-  $role.SelectedItem = if ($cached -and $cached.role -eq 'admin') { $aItem } elseif ($cached -and $cached.role -eq 'kitchen') { $kItem } else { $cItem }
+  $rItem = New-Object System.Windows.Controls.ComboBoxItem; $rItem.Content = 'rider'
+  $role.Items.Add($cItem)|Out-Null; $role.Items.Add($kItem)|Out-Null; $role.Items.Add($aItem)|Out-Null; $role.Items.Add($rItem)|Out-Null
+  $role.SelectedItem = if ($cached -and $cached.role -eq 'admin') { $aItem } elseif ($cached -and $cached.role -eq 'kitchen') { $kItem } elseif ($cached -and $cached.role -eq 'rider') { $rItem } else { $cItem }
   $role.Height = 46; $role.Padding = '10'; $role.Margin = '0,0,0,10'; Set-LoginFieldTheme $role
   $role.Background = ConvertTo-UiBrush '#E5E7EB'
   $role.Foreground = ConvertTo-UiBrush '#111827'
@@ -386,11 +523,11 @@ function Show-StaffLogin {
   $pinLabel = New-Object System.Windows.Controls.TextBlock; $pinLabel.Text = 'Staff PIN'; $pinLabel.Foreground = ConvertTo-UiBrush '#B7BEC9'; $pinLabel.Margin = '0,0,0,5'; $stack.Children.Add($pinLabel)|Out-Null
   $pin = New-Object System.Windows.Controls.PasswordBox; $pin.Height = 46; $pin.Padding = '10'; $pin.Margin = '0,0,0,10'; Set-LoginFieldTheme $pin; $stack.Children.Add($pin)|Out-Null
 
-  $hint = New-Object System.Windows.Controls.TextBlock; $hint.Text = 'Local SQLite Authentication · Works completely offline'; $hint.TextWrapping = 'Wrap'; $hint.Foreground = '#10B981'; $hint.Margin = '0,0,0,16'; $stack.Children.Add($hint)|Out-Null
+  $hint = New-Object System.Windows.Controls.TextBlock; $hint.Text = 'Local SQLite Authentication - Works completely offline'; $hint.TextWrapping = 'Wrap'; $hint.Foreground = '#10B981'; $hint.Margin = '0,0,0,16'; $stack.Children.Add($hint)|Out-Null
 
   $button = New-Object System.Windows.Controls.Button; $button.Content = 'Sign in'; $button.Height = 50; $button.Background = '#DC2626'; $button.Foreground = 'White'; $button.BorderThickness = '0'; $button.IsDefault = $true
   $button.Add_Click(({
-    $button.IsEnabled = $false; $hint.Text = 'Verifying local credentials…'; $hint.Foreground = '#8B949E'
+    $button.IsEnabled = $false; $hint.Text = 'Verifying local credentials...'; $hint.Foreground = '#8B949E'
     try {
       if (-not $identity.Text.Trim() -or -not $pin.SecurePassword.Length) { throw 'Enter your username and PIN.' }
       $selectedRole = [string]($role.SelectedItem.Content)
@@ -421,17 +558,16 @@ $script:pinDisplayTextControl = $null
 function Update-PinDisplay {
   if (-not $script:pinDisplayTextControl) { return }
   if ($script:keypadPin.Length -eq 0) {
-    $script:pinDisplayTextControl.Text = '○ ○ ○ ○'
+    $script:pinDisplayTextControl.Text = 'o o o o'
     $script:pinDisplayTextControl.Foreground = ConvertTo-UiBrush '#8B949E'
   } else {
     $dots = @()
-    for ($i = 0; $i -lt $script:keypadPin.Length; $i++) { $dots += '●' }
+    for ($i = 0; $i -lt $script:keypadPin.Length; $i++) { $dots += '*' }
     $script:pinDisplayTextControl.Text = ($dots -join ' ')
     $script:pinDisplayTextControl.Foreground = ConvertTo-UiBrush '#DC2626'
   }
 }
 
-# Fast Lock Screen & Touch Numeric Keypad Modal (as per DESIGN.md & screen mockups)
 function Show-PinKeypadModal {
   $modal = New-Object System.Windows.Window
   $modal.Title = 'IGNITE POS - Terminal Lock & Role Switch'
@@ -448,14 +584,12 @@ function Show-PinKeypadModal {
   $root.RowDefinitions.Add((New-Object System.Windows.Controls.RowDefinition -Property @{ Height = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star) }))
   $root.RowDefinitions.Add((New-Object System.Windows.Controls.RowDefinition -Property @{ Height = [System.Windows.GridLength]::Auto }))
 
-  # 1. Header
   $headerPanel = New-Object System.Windows.Controls.StackPanel; [System.Windows.Controls.Grid]::SetRow($headerPanel, 0)
   $brand = New-Object System.Windows.Controls.TextBlock; $brand.Text = 'IGNITE POS  |  TERMINAL SECURITY'; $brand.FontSize = 10; $brand.FontWeight = 'Bold'; $brand.Foreground = '#DC2626'; $headerPanel.Children.Add($brand)|Out-Null
   $title = New-Object System.Windows.Controls.TextBlock; $title.Text = 'Fast PIN Unlock / Role Switch'; $title.FontSize = 18; $title.FontWeight = 'Bold'; $title.Margin = '0,2,0,4'; $headerPanel.Children.Add($title)|Out-Null
   $sub = New-Object System.Windows.Controls.TextBlock; $sub.Text = 'Enter staff PIN to unlock terminal or switch active role'; $sub.Foreground = '#8B949E'; $sub.FontSize = 12; $sub.Margin = '0,0,0,14'; $headerPanel.Children.Add($sub)|Out-Null
   $root.Children.Add($headerPanel)|Out-Null
 
-  # 2. Staff / Role Selection
   $userRow = New-Object System.Windows.Controls.Grid; [System.Windows.Controls.Grid]::SetRow($userRow, 1); $userRow.Margin = '0,0,0,12'
   $userRow.ColumnDefinitions.Add((New-Object System.Windows.Controls.ColumnDefinition -Property @{ Width = [System.Windows.GridLength]::new(1.2, [System.Windows.GridUnitType]::Star) }))
   $userRow.ColumnDefinitions.Add((New-Object System.Windows.Controls.ColumnDefinition -Property @{ Width = [System.Windows.GridLength]::new(0.8, [System.Windows.GridUnitType]::Star) }))
@@ -467,25 +601,22 @@ function Show-PinKeypadModal {
 
   $roleSelect = New-Object System.Windows.Controls.ComboBox; $roleSelect.Height = 40; Set-LoginFieldTheme $roleSelect
   $roleSelect.Background = ConvertTo-UiBrush '#E5E7EB'; $roleSelect.Foreground = ConvertTo-UiBrush '#111827'; $roleSelect.ItemContainerStyle = $script:itemStyle
-  foreach ($r in 'cashier','kitchen','admin') {
+  foreach ($r in 'admin','cashier','kitchen','rider') {
     $item = New-Object System.Windows.Controls.ComboBoxItem; $item.Content = $r; $roleSelect.Items.Add($item)|Out-Null
     if ($script:staffSession -and $script:staffSession.role -eq $r) { $roleSelect.SelectedItem = $item }
   }
-  if (-not $roleSelect.SelectedItem) { $roleSelect.SelectedIndex = 0 }
+  if (-not $roleSelect.SelectedItem) { $roleSelect.SelectedIndex = 1 }
   [System.Windows.Controls.Grid]::SetColumn($roleSelect, 1); $userRow.Children.Add($roleSelect)|Out-Null
   $root.Children.Add($userRow)|Out-Null
 
-  # 3. Masked PIN feedback display
   $pinDisplayBorder = New-Object System.Windows.Controls.Border; [System.Windows.Controls.Grid]::SetRow($pinDisplayBorder, 2)
   $pinDisplayBorder.Background = '#14171F'; $pinDisplayBorder.BorderBrush = '#222736'; $pinDisplayBorder.BorderThickness = '1'; $pinDisplayBorder.CornerRadius = '6'; $pinDisplayBorder.Padding = '12'; $pinDisplayBorder.Margin = '0,0,0,14'
-  $pinDisplayText = New-Object System.Windows.Controls.TextBlock; $pinDisplayText.Text = '○ ○ ○ ○'; $pinDisplayText.FontSize = 22; $pinDisplayText.FontWeight = 'Bold'; $pinDisplayText.Foreground = '#8B949E'; $pinDisplayText.HorizontalAlignment = 'Center'
+  $pinDisplayText = New-Object System.Windows.Controls.TextBlock; $pinDisplayText.Text = 'o o o o'; $pinDisplayText.FontSize = 22; $pinDisplayText.FontWeight = 'Bold'; $pinDisplayText.Foreground = '#8B949E'; $pinDisplayText.HorizontalAlignment = 'Center'
   $pinDisplayBorder.Child = $pinDisplayText
   $root.Children.Add($pinDisplayBorder)|Out-Null
   $script:pinDisplayTextControl = $pinDisplayText
   Update-PinDisplay
 
-
-  # 4. Numeric Keypad 3x4 Grid
   $gridKeypad = New-Object System.Windows.Controls.Grid; [System.Windows.Controls.Grid]::SetRow($gridKeypad, 3); $gridKeypad.Margin = '0,0,0,14'
   for ($r = 0; $r -lt 4; $r++) { $gridKeypad.RowDefinitions.Add((New-Object System.Windows.Controls.RowDefinition -Property @{ Height = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star) })) }
   for ($c = 0; $c -lt 3; $c++) { $gridKeypad.ColumnDefinitions.Add((New-Object System.Windows.Controls.ColumnDefinition -Property @{ Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star) })) }
@@ -508,7 +639,6 @@ function Show-PinKeypadModal {
     $btnKey.FontSize = if ($k.text.Length -gt 1) { 11 } else { 18 }
     $btnKey.FontWeight = 'Bold'
 
-    $val = $k.text
     $btnKey.Add_Click(({
       param($sender, $e)
       $t = $sender.Content
@@ -528,7 +658,6 @@ function Show-PinKeypadModal {
   }
   $root.Children.Add($gridKeypad)|Out-Null
 
-  # 5. Bottom Actions & Status
   $footer = New-Object System.Windows.Controls.StackPanel; [System.Windows.Controls.Grid]::SetRow($footer, 4)
   $modalHint = New-Object System.Windows.Controls.TextBlock; $modalHint.Text = ''; $modalHint.Foreground = '#EF4444'; $modalHint.Margin = '0,0,0,8'; $modalHint.HorizontalAlignment = 'Center'; $footer.Children.Add($modalHint)|Out-Null
 
@@ -570,7 +699,6 @@ function Show-PinKeypadModal {
   $footer.Children.Add($btnUnlock)|Out-Null
   $root.Children.Add($footer)|Out-Null
 
-  # Physical Keyboard Handler
   $modal.Add_KeyDown(({
     param($sender, $e)
     $keyStr = $e.Key.ToString()
@@ -589,7 +717,7 @@ function Show-PinKeypadModal {
 }
 
 $xaml = @'
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="IGNITE POS - RMS Counter" Width="1280" Height="840" MinWidth="1040" MinHeight="700" WindowStartupLocation="CenterScreen" Background="#0A0A0C" Foreground="#F0F0F0" FontFamily="Segoe UI">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="IGNITE POS - RMS Counter" Width="1320" Height="860" MinWidth="1100" MinHeight="720" WindowStartupLocation="CenterScreen" Background="#0A0A0C" Foreground="#F0F0F0" FontFamily="Segoe UI">
  <Grid Margin="18">
   <Grid.RowDefinitions>
    <RowDefinition Height="Auto"/>
@@ -626,17 +754,19 @@ $xaml = @'
       <StackPanel>
        <TextBlock Text="IGNITE POS  |  RMS COUNTER" Foreground="#DC2626" FontSize="10" FontWeight="Bold"/>
        <TextBlock Name="sidebarTenant" Text="RESTAURANT TERMINAL" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,3,0,1"/>
-       <TextBlock Text="COUNTER 01 · LOCAL SQLITE" Foreground="#10B981" FontSize="10" FontWeight="SemiBold"/>
+       <TextBlock Text="COUNTER 01 - LOCAL SQLITE" Foreground="#10B981" FontSize="10" FontWeight="SemiBold"/>
       </StackPanel>
      </Border>
 
-     <Button Name="navCashier" Content="Orders (POS)" Height="44" Margin="6,0,6,4" HorizontalContentAlignment="Left" Padding="14,0" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="SemiBold" FontSize="12"/>
-     <Button Name="navKitchen" Content="Kitchen (KDS)" Height="44" Margin="6,0,6,4" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
-     <Button Name="navMenu" Content="Menu Management" Height="44" Margin="6,0,6,4" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
-     <Button Name="navOffers" Content="Special Offers" Height="44" Margin="6,0,6,4" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
-     <Button Name="navInventory" Content="Inventory" Height="44" Margin="6,0,6,4" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
-     <Button Name="navStaff" Content="Staff Accounts" Height="44" Margin="6,0,6,4" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
-     <Button Name="navReports" Content="Reports &amp; Settings" Height="44" Margin="6,0,6,4" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
+     <Button Name="navCashier" Content="Orders (POS)" Height="42" Margin="6,0,6,3" HorizontalContentAlignment="Left" Padding="14,0" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="SemiBold" FontSize="12"/>
+     <Button Name="navKitchen" Content="Kitchen (KDS)" Height="42" Margin="6,0,6,3" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
+     <Button Name="navMenu" Content="Menu Management" Height="42" Margin="6,0,6,3" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
+     <Button Name="navOffers" Content="Special Offers" Height="42" Margin="6,0,6,3" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
+     <Button Name="navInventory" Content="Inventory Tracking" Height="42" Margin="6,0,6,3" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
+     <Button Name="navMarketplace" Content="Supplier Marketplace" Height="42" Margin="6,0,6,3" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
+     <Button Name="navStaff" Content="Staff Accounts" Height="42" Margin="6,0,6,3" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
+     <Button Name="navRider" Content="Rider Deliveries" Height="42" Margin="6,0,6,3" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
+     <Button Name="navReports" Content="Reports &amp; Settings" Height="42" Margin="6,0,6,3" HorizontalContentAlignment="Left" Padding="14,0" Background="#14171F" Foreground="#F0F0F0" BorderBrush="#222736" FontWeight="SemiBold" FontSize="12"/>
     </StackPanel>
 
     <!-- BOTTOM USER PROFILE CARD & FAST SWITCHER -->
@@ -648,7 +778,7 @@ $xaml = @'
         <TextBlock Name="userRoleText" Text="ADMIN" Foreground="White" FontSize="10" FontWeight="Bold"/>
        </Border>
       </DockPanel>
-      <TextBlock Name="sidebarStationStatus" Text="ONLINE · LOCAL SQLITE" Foreground="#10B981" FontSize="10" Margin="0,0,0,8"/>
+      <TextBlock Name="sidebarStationStatus" Text="ONLINE - LOCAL SQLITE" Foreground="#10B981" FontSize="10" Margin="0,0,0,8"/>
       <Button Name="btnSwitchRole" Content="Switch Role / Lock" Height="36" Background="#1B202B" Foreground="#F0F0F0" BorderBrush="#353D50" FontWeight="SemiBold" FontSize="11"/>
      </StackPanel>
     </Border>
@@ -658,33 +788,74 @@ $xaml = @'
    <Grid Grid.Column="1">
     <!-- CASHIER PANE (ORDERS) -->
     <Grid Name="cashierPane" Margin="4,0,0,0">
-     <Grid.ColumnDefinitions><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="0.8*"/></Grid.ColumnDefinitions>
+     <Grid.ColumnDefinitions><ColumnDefinition Width="1.1*"/><ColumnDefinition Width="0.9*"/></Grid.ColumnDefinitions>
+     
+     <!-- Menu Catalog -->
      <DockPanel Grid.Column="0" Margin="0,0,16,0">
-      <TextBlock DockPanel.Dock="Top" Text="Menu Catalog  -  Double-click to add item to active cart" Foreground="#8B949E" Margin="0,0,0,10"/>
+      <TextBlock DockPanel.Dock="Top" Text="Menu Catalog  -  Double-click to add item to active order" Foreground="#8B949E" Margin="0,0,0,10"/>
       <ListBox Name="menuList" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#222736"/>
      </DockPanel>
+
+     <!-- Order Composer & Active Orders -->
      <DockPanel Grid.Column="1">
-      <StackPanel DockPanel.Dock="Top">
-       <TextBlock Text="Table / Order Reference" Foreground="#8B949E"/>
-       <TextBox Name="table" Height="44" Margin="0,6,0,12" Padding="10" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#2C3240"/>
-       <TextBlock Text="Active Terminal Orders" Foreground="#8B949E" Margin="0,0,0,6"/>
+      <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+       <TextBlock Text="ORDER TYPE &amp; CUSTOMER DETAILS" Foreground="#DC2626" FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
+       
+       <!-- Order Type Selector -->
+       <Grid Margin="0,0,0,8">
+        <Grid.ColumnDefinitions>
+         <ColumnDefinition Width="*"/>
+         <ColumnDefinition Width="*"/>
+         <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Button Name="btnTypeDineIn" Grid.Column="0" Content="Dine-In" Height="34" Margin="0,0,4,0" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
+        <Button Name="btnTypeDelivery" Grid.Column="1" Content="Delivery" Height="34" Margin="2,0,2,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2C3240" FontWeight="Bold"/>
+        <Button Name="btnTypePickup" Grid.Column="2" Content="Pickup" Height="34" Margin="4,0,0,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2C3240" FontWeight="Bold"/>
+       </Grid>
+
+       <!-- Context Inputs -->
+       <TextBlock Name="lblReference" Text="Table Number (e.g. T-01, Table 4)" Foreground="#8B949E" FontSize="11" Margin="0,2,0,2"/>
+       <TextBox Name="table" Height="36" Margin="0,0,0,6" Padding="8" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#2C3240"/>
+       
+       <TextBlock Name="lblCustomer" Text="Customer Name &amp; Phone (Optional for Dine-In)" Foreground="#8B949E" FontSize="11" Margin="0,0,0,2"/>
+       <Grid Margin="0,0,0,6">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <TextBox Name="custName" Grid.Column="0" Height="36" Margin="0,0,4,0" Padding="8" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#2C3240"/>
+        <TextBox Name="custPhone" Grid.Column="1" Height="36" Margin="4,0,0,0" Padding="8" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#2C3240"/>
+       </Grid>
+
+       <TextBlock Name="lblAddress" Text="Delivery Address" Foreground="#8B949E" FontSize="11" Margin="0,0,0,2" Visibility="Collapsed"/>
+       <TextBox Name="custAddress" Height="36" Margin="0,0,0,8" Padding="8" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#2C3240" Visibility="Collapsed"/>
+
+       <TextBlock Name="cartSummary" Text="Active Cart: 0 items (Rs 0)" Foreground="#10B981" FontWeight="Bold" FontSize="12" Margin="0,0,0,6"/>
+       <Button Name="placeOrder" Content="Save Order &amp; Print Ticket" Height="44" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
+       
+       <TextBlock Text="Active Terminal Orders" Foreground="#8B949E" FontSize="12" FontWeight="Bold" Margin="0,12,0,4"/>
       </StackPanel>
+
       <ListBox Name="ordersList" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#222736"/>
-      <StackPanel DockPanel.Dock="Bottom">
-       <Button Name="placeOrder" Content="Save Order &amp; Print" Height="48" Margin="0,10,0,6" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
-       <Button Name="paid" Content="Mark Selected Order Paid" Height="44" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2E3547"/>
-      </StackPanel>
+
+      <!-- Context Actions on Selected Order -->
+      <Grid DockPanel.Dock="Bottom" Margin="0,8,0,0">
+       <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="*"/>
+       </Grid.ColumnDefinitions>
+       <Button Name="paid" Grid.Column="0" Content="Mark Order Paid" Height="42" Margin="0,0,4,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2E3547" FontWeight="SemiBold"/>
+       <Button Name="btnContextAction" Grid.Column="1" Content="Action (Serve/Rider)" Height="42" Margin="4,0,0,0" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
+      </Grid>
      </DockPanel>
     </Grid>
 
     <!-- KITCHEN PANE (KDS) -->
     <DockPanel Name="kitchenPane" Margin="4,0,0,0" Visibility="Collapsed">
-     <TextBlock DockPanel.Dock="Top" Text="Kitchen Order Tickets (KDS Pipeline)" Foreground="#8B949E" Margin="0,0,0,10"/>
+     <TextBlock DockPanel.Dock="Top" Text="Kitchen Order Tickets (KDS Pipeline: PENDING -> PREPARING -> READY -> COMPLETED)" Foreground="#8B949E" Margin="0,0,0,10"/>
      <ListBox Name="kitchenList" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#222736"/>
      <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
       <Button Name="printTicket" Content="Print KOT" Height="44" MinWidth="110" Margin="0,0,8,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2E3547"/>
-      <Button Name="preparing" Content="Start Preparing" Height="44" MinWidth="130" Margin="0,0,8,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2E3547"/>
-      <Button Name="ready" Content="Mark Ready" Height="44" MinWidth="110" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
+      <Button Name="preparing" Content="Start Cooking" Height="44" MinWidth="130" Margin="0,0,8,0" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
+      <Button Name="ready" Content="Mark Ready" Height="44" MinWidth="120" Margin="0,0,8,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2E3547" FontWeight="Bold"/>
+      <Button Name="btnKitchenComplete" Content="Mark Served [OK]" Height="44" MinWidth="130" Background="#10B981" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
      </StackPanel>
     </DockPanel>
 
@@ -738,27 +909,70 @@ $xaml = @'
        <Button Name="btnCreateOffer" DockPanel.Dock="Right" Content="+ Create Promotion" Height="38" Padding="14,0" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
        <StackPanel>
         <TextBlock Text="PROMOTIONAL CAMPAIGNS" Foreground="White" FontWeight="Bold" FontSize="14"/>
-        <TextBlock Text="Sync discount combos to the cashier counter and mobile QR customers." Foreground="#8B949E" FontSize="11" Margin="0,2,0,0"/>
+        <TextBlock Text="Discount combos automatically highlight on mobile customer QR menu and local POS." Foreground="#8B949E" FontSize="11" Margin="0,2,0,0"/>
        </StackPanel>
       </DockPanel>
      </Border>
      <ListBox Name="offersList" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#222736"/>
+     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+      <Button Name="btnDeleteOffer" Content="Delete Selected Promotion" Height="40" MinWidth="180" Background="#1A1E29" Foreground="#EF4444" BorderBrush="#2E3547"/>
+     </StackPanel>
     </DockPanel>
 
     <!-- INVENTORY PANE -->
     <DockPanel Name="inventoryPane" Margin="4,0,0,0" Visibility="Collapsed">
-     <TextBlock DockPanel.Dock="Top" Text="Inventory &amp; Ingredient Stock Tracking  -  Real-time counts &amp; low-stock thresholds" Foreground="#8B949E" Margin="0,0,0,10"/>
+     <TextBlock DockPanel.Dock="Top" Text="Raw Material Inventory Tracking  -  Automatic low-stock threshold alerts" Foreground="#8B949E" Margin="0,0,0,10"/>
      <Border DockPanel.Dock="Top" Background="#14171F" BorderBrush="#222736" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,12">
       <DockPanel>
-       <Button Name="btnRefreshInventory" DockPanel.Dock="Right" Content="Sync Inventory" Height="38" Padding="14,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2E3547"/>
+       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+        <Button Name="btnOrderVendorWhatsApp" Content="Order via Vendor WhatsApp" Height="38" Padding="14,0" Margin="0,0,8,0" Background="#10B981" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
+        <Button Name="btnRefreshInventory" Content="Sync Stock" Height="38" Padding="14,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2E3547"/>
+       </StackPanel>
        <StackPanel>
-        <TextBlock Text="STOCK MONITORING" Foreground="White" FontWeight="Bold" FontSize="14"/>
-        <TextBlock Text="Automatic deduction upon kitchen order completion." Foreground="#8B949E" FontSize="11" Margin="0,2,0,0"/>
+        <TextBlock Text="RAW MATERIALS &amp; INGREDIENTS" Foreground="White" FontWeight="Bold" FontSize="14"/>
+        <TextBlock Text="Items falling below minimum threshold trigger instant WhatsApp reorder." Foreground="#8B949E" FontSize="11" Margin="0,2,0,0"/>
        </StackPanel>
       </DockPanel>
      </Border>
      <ListBox Name="inventoryList" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#222736"/>
+     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+      <Button Name="btnAdjustStock" Content="Adjust Current Stock" Height="40" MinWidth="160" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2E3547"/>
+     </StackPanel>
     </DockPanel>
+
+    <!-- SUPPLIER MARKETPLACE PANE -->
+    <Grid Name="marketplacePane" Margin="4,0,0,0" Visibility="Collapsed">
+     <Grid.ColumnDefinitions><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="0.8*"/></Grid.ColumnDefinitions>
+     
+     <!-- Supplies Catalog -->
+     <DockPanel Grid.Column="0" Margin="0,0,16,0">
+      <Border DockPanel.Dock="Top" Background="#14171F" BorderBrush="#222736" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
+       <StackPanel>
+        <TextBlock Text="PROVIDER SUPPLIER MARKETPLACE" Foreground="#DC2626" FontSize="11" FontWeight="Bold"/>
+        <TextBlock Text="Kitchen Equipment, Packaging, Disposables, and Thermal Paper" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,2,0,0"/>
+        <TextBlock Text="Double click item to add 1 unit to supplies order cart." Foreground="#8B949E" FontSize="11" Margin="0,2,0,0"/>
+       </StackPanel>
+      </Border>
+      <ListBox Name="marketplaceList" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#222736"/>
+     </DockPanel>
+
+     <!-- Supplies Order Cart -->
+     <DockPanel Grid.Column="1">
+      <Border DockPanel.Dock="Top" Background="#14171F" BorderBrush="#222736" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
+       <StackPanel>
+        <TextBlock Text="SUPPLIES ORDER CART" Foreground="White" FontWeight="Bold" FontSize="14"/>
+        <TextBlock Name="marketCartSummary" Text="0 items selected" Foreground="#10B981" FontWeight="SemiBold" FontSize="12" Margin="0,4,0,0"/>
+       </StackPanel>
+      </Border>
+
+      <ListBox Name="marketCartList" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#222736"/>
+
+      <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+       <Button Name="btnSubmitMarketOrder" Content="Submit Supply Order via WhatsApp" Height="48" Background="#10B981" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"/>
+       <Button Name="btnClearMarketCart" Content="Clear Supplies Cart" Height="36" Margin="0,6,0,0" Background="#1A1E29" Foreground="#8B949E" BorderBrush="#2E3547"/>
+      </StackPanel>
+     </DockPanel>
+    </Grid>
 
     <!-- STAFF ACCOUNTS PANE -->
     <DockPanel Name="staffPane" Margin="4,0,0,0" Visibility="Collapsed">
@@ -771,23 +985,55 @@ $xaml = @'
      </StackPanel>
     </DockPanel>
 
+    <!-- RIDER DELIVERIES PANE -->
+    <DockPanel Name="riderPane" Margin="4,0,0,0" Visibility="Collapsed">
+     <TextBlock DockPanel.Dock="Top" Text="Assigned Deliveries for Active Rider" Foreground="#8B949E" Margin="0,0,0,10"/>
+     <ListBox Name="riderDeliveriesList" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#222736"/>
+     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+      <Button Name="btnRiderDispatched" Content="Out for Delivery" Height="44" MinWidth="140" Margin="0,0,8,0" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
+      <Button Name="btnRiderDelivered" Content="Mark Delivered [OK]" Height="44" MinWidth="140" Background="#10B981" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
+     </StackPanel>
+    </DockPanel>
+
     <!-- REPORTS & SETTINGS PANE -->
     <DockPanel Name="reportsPane" Margin="4,0,0,0" Visibility="Collapsed">
-     <TextBlock DockPanel.Dock="Top" Text="Terminal Reports &amp; Hardware Diagnostics" Foreground="#8B949E" Margin="0,0,0,10"/>
-     <Border Background="#12141C" BorderBrush="#222736" BorderThickness="1" CornerRadius="6" Padding="18">
+     <TextBlock DockPanel.Dock="Top" Text="Terminal Reports &amp; Configurable System WhatsApp Numbers" Foreground="#8B949E" Margin="0,0,0,10"/>
+     
+     <ScrollViewer VerticalScrollBarVisibility="Auto">
       <StackPanel>
-       <TextBlock Text="DAY END SUMMARY" Foreground="#DC2626" FontSize="12" FontWeight="Bold"/>
-       <TextBlock Name="reportSalesSummary" Text="Sales Report: Local SQLite active" Foreground="White" FontSize="16" FontWeight="Bold" Margin="0,4,0,16"/>
-       
-       <TextBlock Text="TERMINAL CONFIGURATION" Foreground="#8B949E" FontSize="12" FontWeight="Bold" Margin="0,0,0,4"/>
-       <TextBlock Name="reportTerminalInfo" Text="Local Bridge: 127.0.0.1:8765 · Status: Connected" Foreground="#F0F0F0" Margin="0,0,0,16"/>
+       <!-- EOD Summary -->
+       <Border Background="#12141C" BorderBrush="#222736" BorderThickness="1" CornerRadius="6" Padding="18" Margin="0,0,0,14">
+        <StackPanel>
+         <TextBlock Text="DAY END SUMMARY" Foreground="#DC2626" FontSize="12" FontWeight="Bold"/>
+         <TextBlock Name="reportSalesSummary" Text="Sales Report: Local SQLite active" Foreground="White" FontSize="16" FontWeight="Bold" Margin="0,4,0,14"/>
+         <TextBlock Name="reportTerminalInfo" Text="Local Bridge: 127.0.0.1:8765 - Status: Connected" Foreground="#8B949E" Margin="0,0,0,14"/>
+         <StackPanel Orientation="Horizontal">
+          <Button Name="btnPrintZReport" Content="Print End of Day (Z-Report)" Height="40" MinWidth="200" Margin="0,0,10,0" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
+          <Button Name="btnTestPrinter" Content="Test Thermal Printer" Height="40" MinWidth="160" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2E3547"/>
+         </StackPanel>
+        </StackPanel>
+       </Border>
 
-       <StackPanel Orientation="Horizontal">
-        <Button Name="btnPrintZReport" Content="Print End of Day (Z-Report)" Height="42" MinWidth="200" Margin="0,0,10,0" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
-        <Button Name="btnTestPrinter" Content="Test Printer Hardware" Height="42" MinWidth="160" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2E3547"/>
-       </StackPanel>
+       <!-- Configurable WhatsApp Settings -->
+       <Border Background="#12141C" BorderBrush="#222736" BorderThickness="1" CornerRadius="6" Padding="18">
+        <StackPanel>
+         <TextBlock Text="SYSTEM WHATSAPP NUMBERS CONFIGURATION" Foreground="#10B981" FontSize="12" FontWeight="Bold"/>
+         <TextBlock Text="Free wa.me deep links send alerts and orders directly to these configurable numbers." Foreground="#8B949E" FontSize="11" Margin="0,2,0,14"/>
+
+         <TextBlock Text="Restaurant Customer Orders WhatsApp Number (e.g. 03001234567)" Foreground="#B7BEC9" Margin="0,0,0,4"/>
+         <TextBox Name="settingRestaurantPhone" Height="38" Padding="8" Margin="0,0,0,12" Background="#161B22" Foreground="#F0F0F0" BorderBrush="#343943"/>
+
+         <TextBlock Text="Supplier Marketplace WhatsApp Number (e.g. 03129876543)" Foreground="#B7BEC9" Margin="0,0,0,4"/>
+         <TextBox Name="settingSupplierPhone" Height="38" Padding="8" Margin="0,0,0,12" Background="#161B22" Foreground="#F0F0F0" BorderBrush="#343943"/>
+
+         <TextBlock Text="Low-Stock Raw Material Vendor WhatsApp Number (e.g. 03215555555)" Foreground="#B7BEC9" Margin="0,0,0,4"/>
+         <TextBox Name="settingVendorPhone" Height="38" Padding="8" Margin="0,0,0,16" Background="#161B22" Foreground="#F0F0F0" BorderBrush="#343943"/>
+
+         <Button Name="btnSaveSettings" Content="Save WhatsApp Numbers" Height="44" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
+        </StackPanel>
+       </Border>
       </StackPanel>
-     </Border>
+     </ScrollViewer>
     </DockPanel>
    </Grid>
   </Grid>
@@ -819,22 +1065,32 @@ $window = [System.Windows.Markup.XamlReader]::Parse($xaml)
 Set-AppWindowIcon $window
 
 $ctrlNames = @(
-  'menuList','ordersList','kitchenList','staffList','offersList','inventoryList','table','placeOrder','paid',
-  'printTicket','preparing','ready','addStaff','resetPin','deactivateStaff','refresh','status','connection','heading',
-  'cashierPane','kitchenPane','staffPane','menuPane','offersPane','inventoryPane','reportsPane',
-  'navCashier','navKitchen','navMenu','navOffers','navInventory','navStaff','navReports',
+  'menuList','ordersList','kitchenList','staffList','offersList','inventoryList','marketplaceList','marketCartList','riderDeliveriesList',
+  'table','custName','custPhone','custAddress','lblReference','lblCustomer','lblAddress','cartSummary','placeOrder','paid','btnContextAction',
+  'btnTypeDineIn','btnTypeDelivery','btnTypePickup',
+  'printTicket','preparing','ready','btnKitchenComplete','addStaff','resetPin','deactivateStaff','refresh','status','connection','heading',
+  'cashierPane','kitchenPane','staffPane','menuPane','offersPane','inventoryPane','marketplacePane','riderPane','reportsPane',
+  'navCashier','navKitchen','navMenu','navOffers','navInventory','navMarketplace','navStaff','navRider','navReports',
   'sidebarTenant','userDisplayName','userRoleBorder','userRoleText','sidebarStationStatus','btnSwitchRole',
   'menuTotalCount','menuInStockCount','menuSoldOutCount','menuSearchText','btnAddNewMenuItem','menuManagementList',
-  'btnToggleStock','btnEditMenuItem','btnDeleteMenuItem','btnCreateOffer','btnRefreshInventory',
-  'reportSalesSummary','reportTerminalInfo','btnPrintZReport','btnTestPrinter'
+  'btnToggleStock','btnEditMenuItem','btnDeleteMenuItem','btnCreateOffer','btnDeleteOffer',
+  'btnOrderVendorWhatsApp','btnRefreshInventory','btnAdjustStock',
+  'marketCartSummary','btnSubmitMarketOrder','btnClearMarketCart',
+  'btnRiderDispatched','btnRiderDelivered',
+  'reportSalesSummary','reportTerminalInfo','btnPrintZReport','btnTestPrinter',
+  'settingRestaurantPhone','settingSupplierPhone','settingVendorPhone','btnSaveSettings'
 )
 foreach ($name in $ctrlNames) {
   Set-Variable -Scope Script -Name "ui_$name" -Value $window.FindName($name)
 }
 
 $script:activeRole = [string]$script:staffSession.role
+$script:activeOrderType = 'DINE_IN'
 $script:seenOrderKeys = New-Object 'System.Collections.Generic.HashSet[string]'
 $script:hasInitializedOrders = $false
+$script:supplyProducts = @()
+$script:supplierPhone = '03129876543'
+$script:vendorPhone = '03215555555'
 
 function Reset-NavSelection {
   $defaultBg = '#14171F'
@@ -843,7 +1099,9 @@ function Reset-NavSelection {
   $ui_navMenu.Background = $defaultBg
   $ui_navOffers.Background = $defaultBg
   $ui_navInventory.Background = $defaultBg
+  $ui_navMarketplace.Background = $defaultBg
   $ui_navStaff.Background = $defaultBg
+  $ui_navRider.Background = $defaultBg
   $ui_navReports.Background = $defaultBg
 
   $ui_cashierPane.Visibility = 'Collapsed'
@@ -851,8 +1109,47 @@ function Reset-NavSelection {
   $ui_menuPane.Visibility = 'Collapsed'
   $ui_offersPane.Visibility = 'Collapsed'
   $ui_inventoryPane.Visibility = 'Collapsed'
+  $ui_marketplacePane.Visibility = 'Collapsed'
   $ui_staffPane.Visibility = 'Collapsed'
+  $ui_riderPane.Visibility = 'Collapsed'
   $ui_reportsPane.Visibility = 'Collapsed'
+}
+
+function Set-OrderTypeUI([string]$type) {
+  $script:activeOrderType = $type
+  $ui_btnTypeDineIn.Background = '#1A1E29'
+  $ui_btnTypeDelivery.Background = '#1A1E29'
+  $ui_btnTypePickup.Background = '#1A1E29'
+
+  if ($type -eq 'DINE_IN') {
+    $ui_btnTypeDineIn.Background = '#DC2626'
+    $ui_lblReference.Text = 'Table Number (e.g. T-01, Table 4)'
+    $ui_table.Visibility = 'Visible'; $ui_lblReference.Visibility = 'Visible'
+    $ui_lblAddress.Visibility = 'Collapsed'; $ui_custAddress.Visibility = 'Collapsed'
+    $ui_lblCustomer.Text = 'Customer Name & Phone (Optional for Dine-In)'
+  } elseif ($type -eq 'DELIVERY') {
+    $ui_btnTypeDelivery.Background = '#DC2626'
+    $ui_lblReference.Visibility = 'Collapsed'; $ui_table.Visibility = 'Collapsed'
+    $ui_lblAddress.Visibility = 'Visible'; $ui_custAddress.Visibility = 'Visible'
+    $ui_lblCustomer.Text = 'Customer Name & Phone (Required for Delivery)'
+  } elseif ($type -eq 'PICKUP') {
+    $ui_btnTypePickup.Background = '#DC2626'
+    $ui_lblReference.Visibility = 'Collapsed'; $ui_table.Visibility = 'Collapsed'
+    $ui_lblAddress.Visibility = 'Collapsed'; $ui_custAddress.Visibility = 'Collapsed'
+    $ui_lblCustomer.Text = 'Customer Name & Contact Phone (Required for Pickup)'
+  }
+}
+
+function Update-CartSummary {
+  $totalItems = 0; $totalPrice = 0
+  foreach ($kv in $script:cart.GetEnumerator()) {
+    $item = $script:items | Where-Object { $_.id -eq $kv.Key } | Select-Object -First 1
+    if ($item) {
+      $totalItems += [int]$kv.Value
+      $totalPrice += ([int]$kv.Value * [decimal]$item.price)
+    }
+  }
+  $ui_cartSummary.Text = "Active Cart: $totalItems item(s) (Rs $totalPrice)"
 }
 
 function Update-RolePanes {
@@ -862,18 +1159,28 @@ function Update-RolePanes {
 
   if ($script:activeRole -eq 'cashier') {
     $ui_navKitchen.Visibility = 'Collapsed'; $ui_navStaff.Visibility = 'Collapsed'; $ui_navMenu.Visibility = 'Collapsed'
-    $ui_navOffers.Visibility = 'Visible'; $ui_navInventory.Visibility = 'Collapsed'; $ui_navReports.Visibility = 'Collapsed'
+    $ui_navOffers.Visibility = 'Visible'; $ui_navInventory.Visibility = 'Collapsed'; $ui_navMarketplace.Visibility = 'Visible'
+    $ui_navRider.Visibility = 'Collapsed'; $ui_navReports.Visibility = 'Collapsed'
     Reset-NavSelection
     $ui_cashierPane.Visibility = 'Visible'; $ui_navCashier.Background = '#DC2626'; $ui_heading.Text = "Orders - POS Terminal"
   } elseif ($script:activeRole -eq 'kitchen') {
     $ui_navCashier.Visibility = 'Collapsed'; $ui_navStaff.Visibility = 'Collapsed'; $ui_navMenu.Visibility = 'Collapsed'
-    $ui_navOffers.Visibility = 'Collapsed'; $ui_navInventory.Visibility = 'Visible'; $ui_navReports.Visibility = 'Collapsed'
+    $ui_navOffers.Visibility = 'Collapsed'; $ui_navInventory.Visibility = 'Visible'; $ui_navMarketplace.Visibility = 'Collapsed'
+    $ui_navRider.Visibility = 'Collapsed'; $ui_navReports.Visibility = 'Collapsed'
     Reset-NavSelection
     $ui_kitchenPane.Visibility = 'Visible'; $ui_navKitchen.Background = '#DC2626'; $ui_heading.Text = "Kitchen (KDS Pipeline)"
+  } elseif ($script:activeRole -eq 'rider') {
+    $ui_navCashier.Visibility = 'Collapsed'; $ui_navKitchen.Visibility = 'Collapsed'; $ui_navMenu.Visibility = 'Collapsed'
+    $ui_navOffers.Visibility = 'Collapsed'; $ui_navInventory.Visibility = 'Collapsed'; $ui_navMarketplace.Visibility = 'Collapsed'
+    $ui_navStaff.Visibility = 'Collapsed'; $ui_navReports.Visibility = 'Collapsed'
+    $ui_navRider.Visibility = 'Visible'
+    Reset-NavSelection
+    $ui_riderPane.Visibility = 'Visible'; $ui_navRider.Background = '#DC2626'; $ui_heading.Text = "Rider Deliveries"
   } else {
     # Admin / Manager
     $ui_navCashier.Visibility = 'Visible'; $ui_navKitchen.Visibility = 'Visible'; $ui_navMenu.Visibility = 'Visible'
-    $ui_navOffers.Visibility = 'Visible'; $ui_navInventory.Visibility = 'Visible'; $ui_navStaff.Visibility = 'Visible'; $ui_navReports.Visibility = 'Visible'
+    $ui_navOffers.Visibility = 'Visible'; $ui_navInventory.Visibility = 'Visible'; $ui_navMarketplace.Visibility = 'Visible'
+    $ui_navStaff.Visibility = 'Visible'; $ui_navRider.Visibility = 'Visible'; $ui_navReports.Visibility = 'Visible'
     Reset-NavSelection
     $ui_cashierPane.Visibility = 'Visible'; $ui_navCashier.Background = '#DC2626'; $ui_heading.Text = "Orders - POS Terminal"
   }
@@ -890,7 +1197,7 @@ function Reload-Staff {
     foreach ($member in $script:staffList) {
       $statusText = if ($member.active) { 'Active' } else { 'Inactive' }
       $syncText = if ($member.cloud_synced_at) { 'Synced' } else { 'Queued for cloud' }
-      $line = "$($member.name)   (@$($member.username))   ·   Role: $($member.role)   ·   $statusText   ·   $syncText"
+      $line = "$($member.name)   (@$($member.username))   -   Role: $($member.role)   -   $statusText   -   $syncText"
       $entry = New-Object System.Windows.Controls.ListBoxItem
       $entry.Content = $line
       $entry.Tag = $member
@@ -916,7 +1223,7 @@ function Reload-MenuManagement {
     foreach ($item in @($res.items)) {
       if ($filter -and -not $item.name.ToLower().Contains($filter) -and -not $item.category_name.ToLower().Contains($filter)) { continue }
       $stockStatus = if ($item.in_stock) { '[ IN STOCK ]' } else { '[ SOLD OUT ]' }
-      $line = "$stockStatus   $($item.name)   ·   Rs $([decimal]$item.price)   ·   Category: $($item.category_name)"
+      $line = "$stockStatus   $($item.name)   -   Rs $([decimal]$item.price)   -   Category: $($item.category_name)"
       $entry = New-Object System.Windows.Controls.ListBoxItem
       $entry.Content = $line
       $entry.Tag = $item
@@ -932,35 +1239,89 @@ function Reload-MenuManagement {
 
 function Reload-Offers {
   if (-not $ui_offersList) { return }
-  $ui_offersList.Items.Clear()
-  $sampleOffers = @(
-    "WEEKEND COMBO   ·   Smoked Beef Ribs + Loaded Fries + Drink   ·   Rs 2,450   ·   Status: Active",
-    "FAMILY FEAST    ·   Whole Smoked Platter (Serves 4)           ·   Rs 5,800   ·   Status: Active",
-    "LUNCH SPECIAL   ·   Brisket Burger with Beverage             ·   Rs 1,250   ·   Status: Scheduled"
-  )
-  foreach ($offer in $sampleOffers) {
-    $entry = New-Object System.Windows.Controls.ListBoxItem
-    $entry.Content = $offer; $entry.Padding = '12'; $entry.Margin = '3'; $entry.Background = '#161922'
-    $ui_offersList.Items.Add($entry) | Out-Null
+  try {
+    $res = Bridge '/counter/offers'
+    $ui_offersList.Items.Clear()
+    foreach ($offer in @($res.offers)) {
+      $statusText = if ($offer.active) { 'ACTIVE' } else { 'INACTIVE' }
+      $badge = if ($offer.badge_text) { "[$($offer.badge_text)]" } else { '[SPECIAL]' }
+      $line = "$badge   $($offer.title)   -   Style: $($offer.card_style)   -   $statusText   -   $($offer.description)"
+      $entry = New-Object System.Windows.Controls.ListBoxItem
+      $entry.Content = $line; $entry.Tag = $offer; $entry.Padding = '12'; $entry.Margin = '3'; $entry.Background = '#161922'
+      $ui_offersList.Items.Add($entry) | Out-Null
+    }
+  } catch {
+    $ui_status.Text = "Offers error: $($_.Exception.Message)"
   }
 }
 
 function Reload-Inventory {
   if (-not $ui_inventoryList) { return }
-  $ui_inventoryList.Items.Clear()
-  $sampleStock = @(
-    "Beef Brisket Prime Cut   ·   In Stock: 42.5 kg   ·   Threshold: 15.0 kg   ·   Normal",
-    "Burger Brioche Buns      ·   In Stock: 120 pcs   ·   Threshold: 40 pcs    ·   Normal",
-    "BBQ Smoke Sauce (Gallon) ·   In Stock: 4 units   ·   Threshold: 5 units   ·   LOW STOCK WARNING",
-    "Potato Fries Crinkle Cut ·   In Stock: 65.0 kg   ·   Threshold: 20.0 kg   ·   Normal"
-  )
-  foreach ($item in $sampleStock) {
-    $entry = New-Object System.Windows.Controls.ListBoxItem
-    $entry.Content = $item; $entry.Padding = '12'; $entry.Margin = '3'
-    $entry.Background = if ($item -match 'LOW STOCK') { '#31191D' } else { '#161922' }
-    $entry.Foreground = if ($item -match 'LOW STOCK') { '#EF4444' } else { '#F0F0F0' }
-    $ui_inventoryList.Items.Add($entry) | Out-Null
+  try {
+    $res = Bridge '/counter/inventory'
+    $script:vendorPhone = if ($res.vendor_phone) { $res.vendor_phone } else { '03215555555' }
+    $ui_inventoryList.Items.Clear()
+    foreach ($item in @($res.items)) {
+      $isLow = [decimal]$item.current_stock -le [decimal]$item.minimum_threshold
+      $statusBadge = if ($isLow) { '[ LOW STOCK ALERT ]' } else { '[ NORMAL ]' }
+      $line = "$statusBadge   $($item.name)   -   Stock: $($item.current_stock) $($item.unit)   -   Min: $($item.minimum_threshold) $($item.unit)   -   Cost: Rs $($item.cost_per_unit)"
+      $entry = New-Object System.Windows.Controls.ListBoxItem
+      $entry.Content = $line; $entry.Tag = $item; $entry.Padding = '12'; $entry.Margin = '3'
+      $entry.Background = if ($isLow) { '#31191D' } else { '#161922' }
+      $entry.Foreground = if ($isLow) { '#EF4444' } else { '#F0F0F0' }
+      $ui_inventoryList.Items.Add($entry) | Out-Null
+    }
+  } catch {
+    $ui_status.Text = "Inventory error: $($_.Exception.Message)"
   }
+}
+
+function Reload-Marketplace {
+  if (-not $ui_marketplaceList) { return }
+  try {
+    $res = Bridge '/counter/marketplace'
+    $script:supplyProducts = @($res.products)
+    $script:supplierPhone = if ($res.supplier_phone) { $res.supplier_phone } else { '03129876543' }
+    $ui_marketplaceList.Items.Clear()
+    foreach ($p in $script:supplyProducts) {
+      $priceStr = if ($p.price) { "Rs $([decimal]$p.price)" } else { "Contact for Price" }
+      $line = "[$($p.category)]   $($p.name)   -   $priceStr`n$($p.description)"
+      $entry = New-Object System.Windows.Controls.ListBoxItem
+      $entry.Content = $line; $entry.Tag = $p; $entry.Padding = '12'; $entry.Margin = '4'; $entry.Background = '#161922'
+      $ui_marketplaceList.Items.Add($entry) | Out-Null
+    }
+  } catch { }
+}
+
+function Update-MarketCartUI {
+  if (-not $ui_marketCartList) { return }
+  $ui_marketCartList.Items.Clear()
+  $count = 0; $total = 0
+  foreach ($kv in $script:supplyCart.GetEnumerator()) {
+    $p = $script:supplyProducts | Where-Object { $_.id -eq $kv.Key } | Select-Object -First 1
+    if ($p) {
+      $qty = [int]$kv.Value
+      $count += $qty
+      $price = if ($p.price) { [decimal]$p.price } else { 0 }
+      $sub = $qty * $price
+      $total += $sub
+      $entry = New-Object System.Windows.Controls.ListBoxItem
+      $entry.Content = "$($p.name) × $qty   -   Rs $sub"
+      $entry.Tag = $p; $entry.Padding = '10'; $entry.Margin = '2'; $entry.Background = '#161922'
+      $ui_marketCartList.Items.Add($entry) | Out-Null
+    }
+  }
+  $ui_marketCartSummary.Text = "$count item(s) selected  -  Subtotal: Rs $total"
+}
+
+function Reload-Settings {
+  try {
+    $res = Bridge '/counter/settings'
+    $s = $res.settings
+    if ($ui_settingRestaurantPhone -and $s.restaurant_phone) { $ui_settingRestaurantPhone.Text = [string]$s.restaurant_phone }
+    if ($ui_settingSupplierPhone -and $s.supplier_marketplace_phone) { $ui_settingSupplierPhone.Text = [string]$s.supplier_marketplace_phone }
+    if ($ui_settingVendorPhone -and $s.vendor_phone) { $ui_settingVendorPhone.Text = [string]$s.vendor_phone }
+  } catch { }
 }
 
 function Reload-Reports {
@@ -969,14 +1330,33 @@ function Reload-Reports {
     $paidOrders = @($script:orders | Where-Object { $_.payment_status -eq 'PAID' })
     $totalSales = 0
     foreach ($o in $paidOrders) { $totalSales += [decimal]$o.total_amount }
-    $ui_reportSalesSummary.Text = "Completed Orders: $($paidOrders.Count)   ·   Total Sales: Rs $totalSales"
-    $ui_reportTerminalInfo.Text = "Terminal: $($ui_sidebarTenant.Text)   ·   Queue: $($script:orders.Count) orders cached   ·   Bridge: 127.0.0.1:8765"
+    $ui_reportSalesSummary.Text = "Completed Orders: $($paidOrders.Count)   -   Total Sales: Rs $totalSales"
+    $ui_reportTerminalInfo.Text = "Terminal: $($ui_sidebarTenant.Text)   -   Bridge: 127.0.0.1:8765   -   Queue: $($script:orders.Count) orders cached"
   } catch { }
+}
+
+function Reload-RiderDeliveries {
+  if (-not $ui_riderDeliveriesList) { return }
+  $ui_riderDeliveriesList.Items.Clear()
+  $myId = [string]$script:staffSession.id
+  $myUsername = [string]$script:staffSession.username
+
+  $delivs = @($script:orders | Where-Object { $_.order_type -eq 'DELIVERY' -and $_.counter_status -ne 'COMPLETED' })
+  foreach ($d in $delivs) {
+    $itemsText = ($d.items | ForEach-Object { "$($_.name) × $($_.quantity)" }) -join ', '
+    $riderText = if ($d.rider_name) { "Rider: $($d.rider_name)" } else { "Unassigned" }
+    $line = "#$($d.sequence_no)   -   $($d.counter_status)   -   $riderText`nCustomer: $($d.customer_name) ($($d.customer_phone))`nAddress: $($d.customer_address)`nItems: $itemsText   -   Total: Rs $($d.total_amount)"
+    $entry = New-Object System.Windows.Controls.ListBoxItem
+    $entry.Content = $line; $entry.Tag = $d; $entry.Padding = '12'; $entry.Margin = '3'
+    $entry.Background = if ($d.rider_name -eq $myUsername -or $d.rider_name -eq $script:staffSession.name) { '#1B2E24' } else { '#161922' }
+    $ui_riderDeliveriesList.Items.Add($entry) | Out-Null
+  }
 }
 
 function Reload-Counter {
   try {
-    $state = Bridge "/counter/state?role=$script:activeRole"; $script:items = @($state.items); $script:orders = @($state.orders); $script:remoteOrders = @($state.remote_orders)
+    $state = Bridge "/counter/state?role=$script:activeRole"
+    $script:items = @($state.items); $script:orders = @($state.orders); $script:remoteOrders = @($state.remote_orders)
     if ($ui_sidebarTenant) { $ui_sidebarTenant.Text = [string]$state.tenant_slug.ToUpper() }
 
     # Detect newly incoming orders and play chime alert
@@ -1004,72 +1384,175 @@ function Reload-Counter {
     $ui_menuList.Items.Clear()
     foreach ($item in $script:items) {
       $entry = New-Object System.Windows.Controls.ListBoxItem
-      $entry.Content = "$($item.name)   ·   Rs $([decimal]$item.price)   ·   $($item.category_name)"
+      $entry.Content = "$($item.name)   -   Rs $([decimal]$item.price)   -   $($item.category_name)"
       $entry.Tag = $item; $entry.Padding = '14'; $entry.Margin = '4'; $entry.Background = '#161922'
-      if (-not $item.in_stock) { $entry.IsEnabled = $false; $entry.Content += '   ·   SOLD OUT' }
+      if (-not $item.in_stock) { $entry.IsEnabled = $false; $entry.Content += '   -   [SOLD OUT]' }
       $ui_menuList.Items.Add($entry) | Out-Null
     }
 
     $ui_ordersList.Items.Clear(); $ui_kitchenList.Items.Clear()
     foreach ($order in $script:orders) {
       $itemsText = ($order.items | ForEach-Object { "$($_.name) × $($_.quantity)" }) -join ', '
-      $staffInfo = if ($order.staff_name) { " · Staff: $($order.staff_name)" } else { '' }
-      $line = "#$($order.sequence_no) · Table $($order.table_number) · Rs $($order.total_amount) · $($order.counter_status) · Payment $($order.payment_status)$staffInfo · $itemsText"
+      $typeBadge = "[$($order.order_type)]"
+      
+      $refInfo = if ($order.order_type -eq 'DINE_IN') {
+        "Table $($order.table_number)"
+      } elseif ($order.order_type -eq 'DELIVERY') {
+        "Delivery to: $($order.customer_name) ($($order.customer_phone)) - $($order.customer_address)"
+      } else {
+        "Pickup: $($order.customer_name) ($($order.customer_phone))"
+      }
+
+      $riderInfo = if ($order.rider_name) { " - Rider: $($order.rider_name)" } else { "" }
+      $line = "#$($order.sequence_no) $typeBadge - $refInfo - Rs $($order.total_amount) - $($order.counter_status) - $($order.payment_status)$riderInfo - $itemsText"
+      
       $entry = New-Object System.Windows.Controls.ListBoxItem; $entry.Content = $line; $entry.Tag = $order; $entry.Padding = '12'; $entry.Margin = '3'; $entry.Background = '#161922'
       $ui_ordersList.Items.Add($entry) | Out-Null
+
       if ($order.counter_status -ne 'COMPLETED' -and $order.counter_status -ne 'CANCELLED') {
-        $ticket = New-Object System.Windows.Controls.ListBoxItem; $ticket.Content = $line; $ticket.Tag = $order; $ticket.Padding = '14'; $ticket.Margin = '5'; $ticket.Background = '#161922'
+        $ticket = New-Object System.Windows.Controls.ListBoxItem; $ticket.Content = $line; $ticket.Tag = $order; $ticket.Padding = '14'; $ticket.Margin = '5'
+        $ticket.Background = if ($order.counter_status -eq 'READY') { '#133526' } elseif ($order.counter_status -eq 'PREPARING') { '#2A1F11' } else { '#161922' }
         $ui_kitchenList.Items.Add($ticket) | Out-Null
       }
     }
 
     foreach ($order in $script:remoteOrders) {
       if ($script:orders.cloud_order_id -contains $order.id) { continue }
-      if ($script:activeRole -eq 'cashier') {
-        $itemsText = ($order.items | ForEach-Object { "$($_.name) × $($_.quantity)" }) -join ', '
-        $entry = New-Object System.Windows.Controls.ListBoxItem; $entry.Content = "WEB · Order #$($order.order_number) · $($order.order_type) · $itemsText"; $entry.Tag = $order; $entry.Padding = '12'; $entry.Margin = '3'; $entry.Background = '#31191D'
-        $ui_ordersList.Items.Add($entry) | Out-Null
-      } elseif ($order.order_id) {
-        $itemsText = ($order.items | ForEach-Object { "$($_.name) × $($_.quantity)" }) -join ', '
-        $entry = New-Object System.Windows.Controls.ListBoxItem; $entry.Content = "WEB · Order #$($order.order_number) · $($order.status) · $itemsText"; $entry.Tag = $order; $entry.Padding = '14'; $entry.Margin = '5'; $entry.Background = '#31191D'
+      $itemsText = ($order.items | ForEach-Object { "$($_.name) × $($_.quantity)" }) -join ', '
+      $entry = New-Object System.Windows.Controls.ListBoxItem; $entry.Content = "WEB - #$($order.order_number) - [$($order.order_type)] - $($order.status) - $itemsText"; $entry.Tag = $order; $entry.Padding = '12'; $entry.Margin = '3'; $entry.Background = '#31191D'
+      $ui_ordersList.Items.Add($entry) | Out-Null
+      if ($order.status -ne 'COMPLETED' -and $order.status -ne 'CANCELLED') {
         $ui_kitchenList.Items.Add($entry) | Out-Null
       }
     }
-    $ui_connection.Text = "LOCAL · $($state.pending_orders) queued"
-    $ui_status.Text = "Local SQLite ready · $($state.items.Count) cached menu items · $($state.orders.Count) orders"
+    $ui_connection.Text = "LOCAL - $($state.pending_orders) queued"
+    $ui_status.Text = "Local SQLite ready - $($state.items.Count) menu items - $($state.orders.Count) orders"
     Reload-Reports
+    Reload-RiderDeliveries
   } catch {
     $ui_connection.Text = 'Bridge unavailable'
     $ui_status.Text = $_.Exception.Message
   }
 }
 
+# Double click to add to active POS order
 $ui_menuList.Add_MouseDoubleClick({
   if ($ui_menuList.SelectedItem -and $ui_menuList.SelectedItem.Tag.in_stock) {
     $item = $ui_menuList.SelectedItem.Tag
     $script:cart[$item.id] = 1 + [int]$script:cart[$item.id]
-    $ui_status.Text = "Added $($item.name) · quantity $($script:cart[$item.id]). Double-click to add more."
+    Update-CartSummary
+    $ui_status.Text = "Added $($item.name) (quantity: $($script:cart[$item.id])). Click 'Save Order' when done."
   }
 })
 
+# Order Type switching clicks
+$ui_btnTypeDineIn.Add_Click({ Set-OrderTypeUI 'DINE_IN' })
+$ui_btnTypeDelivery.Add_Click({ Set-OrderTypeUI 'DELIVERY' })
+$ui_btnTypePickup.Add_Click({ Set-OrderTypeUI 'PICKUP' })
+
+# Save Order & Print Ticket
 $ui_placeOrder.Add_Click({
-  if (-not $ui_table.Text.Trim()) { $ui_status.Text = 'Enter a table number first.'; return }
-  if (-not $script:cart.Count) { $ui_status.Text = 'Double-click available menu items to add them to this order.'; return }
+  if (-not $script:cart.Count) { $ui_status.Text = 'Double-click items from menu to add them to this order.'; return }
+  
+  $orderType = $script:activeOrderType
+  $tbl = $ui_table.Text.Trim()
+  $cName = $ui_custName.Text.Trim()
+  $cPhone = $ui_custPhone.Text.Trim()
+  $cAddress = $ui_custAddress.Text.Trim()
+
+  if ($orderType -eq 'DINE_IN' -and -not $tbl) {
+    $ui_status.Text = 'Enter a Table Number for Dine-In (e.g. T-01).'; return
+  }
+  if ($orderType -eq 'DELIVERY' -and (-not $cAddress -or -not $cPhone)) {
+    $ui_status.Text = 'Customer Phone and Delivery Address are required for Delivery orders.'; return
+  }
+  if ($orderType -eq 'PICKUP' -and -not $cPhone) {
+    $ui_status.Text = 'Contact Phone number is required for Pickup.'; return
+  }
+
   try {
     $selectedItems = @($script:cart.GetEnumerator() | ForEach-Object { @{ item_id = $_.Key; quantity = [int]$_.Value } })
-    $saved = Bridge '/orders' 'POST' @{
+    $payload = @{
       client_order_id = [guid]::NewGuid().ToString()
-      order_type = 'DINE_IN'
-      table_number = $ui_table.Text.Trim()
+      order_type = $orderType
+      table_number = if ($orderType -eq 'DINE_IN') { $tbl } else { $null }
+      customer_name = $cName
+      customer_phone = $cPhone
+      customer_address = if ($orderType -eq 'DELIVERY') { $cAddress } else { $null }
       items = $selectedItems
       staff_id = $script:staffSession.id
       staff_name = $script:staffSession.name
     }
-    $ui_status.Text = "Saved local order #$($saved.sequence_no). Sending print job…"
-    try { $null = Bridge '/print' 'POST' $saved; $ui_status.Text = "Order #$($saved.sequence_no) saved locally and sent to printer." }
-    catch { $ui_status.Text = "Order #$($saved.sequence_no) saved; printer unavailable: $($_.Exception.Message)" }
-    $script:cart = @{}; Reload-Counter
-  } catch { $ui_status.Text = $_.Exception.Message }
+    
+    $saved = Bridge '/orders' 'POST' $payload
+    $ui_status.Text = "Saved $orderType order #$($saved.sequence_no). Sending print job..."
+    try {
+      $null = Bridge '/print' 'POST' @{
+        client_order_id = $saved.client_order_id
+        order_number = "#$($saved.sequence_no)"
+        order_type = $orderType
+        table_number = $tbl
+        total_amount = $saved.total_amount
+        items = $saved.items
+        print_type = 'RECEIPT'
+      }
+      $ui_status.Text = "Order #$($saved.sequence_no) saved and printed."
+    } catch {
+      $ui_status.Text = "Order #$($saved.sequence_no) saved; printer unavailable: $($_.Exception.Message)"
+    }
+    
+    $script:cart = @{}
+    Update-CartSummary
+    $ui_table.Text = ''; $ui_custName.Text = ''; $ui_custPhone.Text = ''; $ui_custAddress.Text = ''
+    Reload-Counter
+  } catch {
+    $ui_status.Text = $_.Exception.Message
+  }
+})
+
+# Context action on selected order in Cashier POS
+$ui_ordersList.Add_SelectionChanged({
+  if ($ui_ordersList.SelectedItem) {
+    $order = $ui_ordersList.SelectedItem.Tag
+    if ($order.order_type -eq 'DELIVERY') {
+      $ui_btnContextAction.Content = if ($order.rider_name) { "Change Rider ($($order.rider_name))" } else { "Assign Rider" }
+      $ui_btnContextAction.Background = ConvertTo-UiBrush '#DC2626'
+    } elseif ($order.order_type -eq 'PICKUP') {
+      $ui_btnContextAction.Content = if ($order.counter_status -eq 'READY') { "Mark Picked Up" } else { "Mark Ready for Pickup" }
+      $ui_btnContextAction.Background = ConvertTo-UiBrush '#10B981'
+    } else {
+      # Dine In
+      $ui_btnContextAction.Content = "Serve to Table / Done"
+      $ui_btnContextAction.Background = ConvertTo-UiBrush '#DC2626'
+    }
+  }
+})
+
+$ui_btnContextAction.Add_Click({
+  if (-not $ui_ordersList.SelectedItem) { $ui_status.Text = 'Select an order from the list first.'; return }
+  $order = $ui_ordersList.SelectedItem.Tag
+  if (-not $order.client_order_id) { $ui_status.Text = 'Web orders must be completed through web dashboard.'; return }
+
+  if ($order.order_type -eq 'DELIVERY') {
+    if (Show-AssignRiderDialog $order) {
+      Reload-Counter
+      $ui_status.Text = "Assigned rider to order #$($order.sequence_no)."
+    }
+  } elseif ($order.order_type -eq 'PICKUP') {
+    $nextStatus = if ($order.counter_status -eq 'READY') { 'COMPLETED' } else { 'READY' }
+    try {
+      $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = $nextStatus }
+      Reload-Counter
+      $ui_status.Text = "Pickup order #$($order.sequence_no) updated to $nextStatus."
+    } catch { $ui_status.Text = $_.Exception.Message }
+  } else {
+    # Dine In
+    try {
+      $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'COMPLETED' }
+      Reload-Counter
+      $ui_status.Text = "Dine-in order #$($order.sequence_no) marked completed."
+    } catch { $ui_status.Text = $_.Exception.Message }
+  }
 })
 
 $ui_refresh.Add_Click({
@@ -1099,16 +1582,24 @@ $ui_navOffers.Add_Click({
   Reload-Offers
 })
 $ui_navInventory.Add_Click({
-  Reset-NavSelection; $ui_inventoryPane.Visibility = 'Visible'; $ui_navInventory.Background = '#DC2626'; $ui_heading.Text = "Inventory & Ingredient Stock"
+  Reset-NavSelection; $ui_inventoryPane.Visibility = 'Visible'; $ui_navInventory.Background = '#DC2626'; $ui_heading.Text = "Raw Material Inventory Tracking"
   Reload-Inventory
+})
+$ui_navMarketplace.Add_Click({
+  Reset-NavSelection; $ui_marketplacePane.Visibility = 'Visible'; $ui_navMarketplace.Background = '#DC2626'; $ui_heading.Text = "Supplier Marketplace (Equipment & Supplies)"
+  Reload-Marketplace
 })
 $ui_navStaff.Add_Click({
   Reset-NavSelection; $ui_staffPane.Visibility = 'Visible'; $ui_navStaff.Background = '#DC2626'; $ui_heading.Text = "Staff Accounts & Security"
   Reload-Staff
 })
+$ui_navRider.Add_Click({
+  Reset-NavSelection; $ui_riderPane.Visibility = 'Visible'; $ui_navRider.Background = '#DC2626'; $ui_heading.Text = "Rider Deliveries"
+  Reload-RiderDeliveries
+})
 $ui_navReports.Add_Click({
-  Reset-NavSelection; $ui_reportsPane.Visibility = 'Visible'; $ui_navReports.Background = '#DC2626'; $ui_heading.Text = "Reports & Hardware Settings"
-  Reload-Reports
+  Reset-NavSelection; $ui_reportsPane.Visibility = 'Visible'; $ui_navReports.Background = '#DC2626'; $ui_heading.Text = "Terminal Reports & System Settings"
+  Reload-Reports; Reload-Settings
 })
 
 # Fast Role Switch / Lock Keypad Trigger
@@ -1163,6 +1654,107 @@ $ui_btnDeleteMenuItem.Add_Click({
 })
 $ui_menuSearchText.Add_TextChanged({ Reload-MenuManagement })
 
+# Special Offers Actions
+$ui_btnCreateOffer.Add_Click({
+  if (Show-SpecialOfferDialog) {
+    Reload-Offers
+    $ui_status.Text = "Special offer saved locally and queued for sync."
+  }
+})
+$ui_btnDeleteOffer.Add_Click({
+  if ($ui_offersList.SelectedItem) {
+    $offer = $ui_offersList.SelectedItem.Tag
+    try {
+      $null = Bridge '/counter/offers/delete' 'POST' @{ id = $offer.id }
+      Reload-Offers
+      $ui_status.Text = "Deleted promotion '$($offer.title)'."
+    } catch { $ui_status.Text = $_.Exception.Message }
+  } else {
+    $ui_status.Text = 'Select an offer to delete.'
+  }
+})
+
+# Inventory Actions
+$ui_btnRefreshInventory.Add_Click({ Reload-Inventory })
+$ui_btnOrderVendorWhatsApp.Add_Click({
+  # Generate free wa.me purchase order to configured vendor number
+  try {
+    $res = Bridge '/counter/inventory'
+    $lowItems = @($res.items | Where-Object { [decimal]$_.current_stock -le [decimal]$_.minimum_threshold })
+    if ($lowItems.Count -eq 0) {
+      $lowItems = @($res.items | Select-Object -First 3)
+    }
+    $lines = @("RAW MATERIAL PURCHASE ORDER - $($ui_sidebarTenant.Text)", "Please deliver the following kitchen supplies urgently:")
+    foreach ($i in $lowItems) {
+      $reorderQty = [Math]::Max(10, [int]([decimal]$i.minimum_threshold * 2))
+      $lines += "- $($i.name): $reorderQty $($i.unit) (Current Stock: $($i.current_stock) $($i.unit))"
+    }
+    $cleanPhone = $script:vendorPhone.Replace('+','').Replace('-','').Replace(' ','')
+    if ($cleanPhone.StartsWith('0')) { $cleanPhone = '92' + $cleanPhone.Substring(1) }
+    $msgText = [Uri]::EscapeDataString(($lines -join "`n"))
+    $url = "https://wa.me/$cleanPhone?text=$msgText"
+    [System.Diagnostics.Process]::Start($url) | Out-Null
+    $ui_status.Text = "Opened WhatsApp Vendor Purchase Order to $cleanPhone."
+  } catch {
+    $ui_status.Text = "Vendor alert failed: $($_.Exception.Message)"
+  }
+})
+
+# Supplier Marketplace Actions
+$ui_marketplaceList.Add_MouseDoubleClick({
+  if ($ui_marketplaceList.SelectedItem) {
+    $p = $ui_marketplaceList.SelectedItem.Tag
+    $script:supplyCart[$p.id] = 1 + [int]$script:supplyCart[$p.id]
+    Update-MarketCartUI
+    $ui_status.Text = "Added $($p.name) to supplies cart."
+  }
+})
+
+$ui_btnClearMarketCart.Add_Click({
+  $script:supplyCart = @{}
+  Update-MarketCartUI
+  $ui_status.Text = "Supplies cart cleared."
+})
+
+$ui_btnSubmitMarketOrder.Add_Click({
+  if ($script:supplyCart.Count -eq 0) {
+    $ui_status.Text = "Double-click items from the catalog to add them to your supplies order."; return
+  }
+  try {
+    $items = @()
+    $orderLines = @("RMS SUPPLIER MARKETPLACE ORDER", "Restaurant: $($ui_sidebarTenant.Text)", "Requested Supply Items:")
+    $totalAmount = 0
+    foreach ($kv in $script:supplyCart.GetEnumerator()) {
+      $p = $script:supplyProducts | Where-Object { $_.id -eq $kv.Key } | Select-Object -First 1
+      if ($p) {
+        $qty = [int]$kv.Value
+        $price = if ($p.price) { [decimal]$p.price } else { 0 }
+        $totalAmount += ($qty * $price)
+        $items += @{ product_id = $p.id; name = $p.name; quantity = $qty; price = $price }
+        $orderLines += "- $($p.name) x$qty (Rs $($qty * $price))"
+      }
+    }
+    $orderLines += "TOTAL ESTIMATED AMOUNT: Rs $totalAmount"
+    $orderLines += "Please confirm delivery dispatch."
+
+    # Save to local SQLite stock_orders
+    $null = Bridge '/counter/marketplace/order' 'POST' @{ items = $items; total_amount = $totalAmount }
+
+    # Open free WhatsApp wa.me to configured supplier marketplace phone
+    $cleanPhone = $script:supplierPhone.Replace('+','').Replace('-','').Replace(' ','')
+    if ($cleanPhone.StartsWith('0')) { $cleanPhone = '92' + $cleanPhone.Substring(1) }
+    $msgText = [Uri]::EscapeDataString(($orderLines -join "`n"))
+    $url = "https://wa.me/$cleanPhone?text=$msgText"
+    [System.Diagnostics.Process]::Start($url) | Out-Null
+
+    $script:supplyCart = @{}
+    Update-MarketCartUI
+    $ui_status.Text = "Stock order saved and WhatsApp opened to supplier at $cleanPhone."
+  } catch {
+    $ui_status.Text = "Marketplace order error: $($_.Exception.Message)"
+  }
+})
+
 # Staff Management Actions
 $ui_addStaff.Add_Click({
   if (Show-StaffDialog) { Reload-Staff; $ui_status.Text = 'Staff account created in local SQLite and queued for sync.' }
@@ -1207,7 +1799,7 @@ $ui_printTicket.Add_Click({
       }
       $ui_status.Text = 'Kitchen ticket sent to the local printer.'
     } catch {
-      $ui_status.Text = "Ticket remains in the local queue; printer unavailable: $($_.Exception.Message)"
+      $ui_status.Text = "Ticket remains in local queue; printer unavailable: $($_.Exception.Message)"
     }
   }
 })
@@ -1236,9 +1828,14 @@ $ui_preparing.Add_Click({
         $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'PREPARING' }
       } else {
         $access = Bridge '/counter/staff-access?role=kitchen'
-        $null = Invoke-RestMethod -Method Patch -Uri "$script:webAppUrl/api/staff/kitchen-tickets" -TimeoutSec 5 -Headers @{ Authorization = "Bearer $($access.access_token)" } -ContentType 'application/json' -Body (@{ order_id = $order.order_id; status = 'PREPARING' } | ConvertTo-Json -Compress)
+        $ticketUri = $script:webAppUrl + '/api/staff/kitchen-tickets'
+        $bearerToken = "Bearer " + $access.access_token
+        $hdrs = @{ Authorization = $bearerToken }
+        $body = @{ order_id = $order.order_id; status = 'PREPARING' } | ConvertTo-Json -Compress
+        $null = Invoke-RestMethod -Method Patch -Uri $ticketUri -TimeoutSec 5 -Headers $hdrs -ContentType 'application/json' -Body $body
       }
       Reload-Counter
+      $ui_status.Text = "Order #$($order.sequence_no) is now cooking (PREPARING)."
     } catch {
       $ui_status.Text = $_.Exception.Message
     }
@@ -1249,16 +1846,92 @@ $ui_ready.Add_Click({
   if ($ui_kitchenList.SelectedItem) {
     $order = $ui_kitchenList.SelectedItem.Tag
     try {
+      $ui_ready.IsEnabled = $false
+      $ui_ready.Content = "Ready [OK]"
+      $ui_ready.Background = ConvertTo-UiBrush '#10B981'
+      
       if ($order.client_order_id) {
         $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'READY' }
       } else {
         $access = Bridge '/counter/staff-access?role=kitchen'
-        $null = Invoke-RestMethod -Method Patch -Uri "$script:webAppUrl/api/staff/kitchen-tickets" -TimeoutSec 5 -Headers @{ Authorization = "Bearer $($access.access_token)" } -ContentType 'application/json' -Body (@{ order_id = $order.order_id; status = 'READY' } | ConvertTo-Json -Compress)
+        $ticketUri = $script:webAppUrl + '/api/staff/kitchen-tickets'
+        $bearerToken = "Bearer " + $access.access_token
+        $hdrs = @{ Authorization = $bearerToken }
+        $body = @{ order_id = $order.order_id; status = 'READY' } | ConvertTo-Json -Compress
+        $null = Invoke-RestMethod -Method Patch -Uri $ticketUri -TimeoutSec 5 -Headers $hdrs -ContentType 'application/json' -Body $body
       }
       Reload-Counter
+      $ui_status.Text = "Order #$($order.sequence_no) marked READY."
+    } catch {
+      $ui_status.Text = $_.Exception.Message
+    } finally {
+      Start-Sleep -Milliseconds 400
+      $ui_ready.IsEnabled = $true
+      $ui_ready.Content = "Mark Ready"
+      $ui_ready.Background = ConvertTo-UiBrush '#1A1E29'
+    }
+  }
+})
+
+$ui_btnKitchenComplete.Add_Click({
+  if ($ui_kitchenList.SelectedItem) {
+    $order = $ui_kitchenList.SelectedItem.Tag
+    try {
+      if ($order.client_order_id) {
+        $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'COMPLETED' }
+      } else {
+        $access = Bridge '/counter/staff-access?role=kitchen'
+        $ticketUri = $script:webAppUrl + '/api/staff/kitchen-tickets'
+        $bearerToken = "Bearer " + $access.access_token
+        $hdrs = @{ Authorization = $bearerToken }
+        $body = @{ order_id = $order.order_id; status = 'COMPLETED' } | ConvertTo-Json -Compress
+        $null = Invoke-RestMethod -Method Patch -Uri $ticketUri -TimeoutSec 5 -Headers $hdrs -ContentType 'application/json' -Body $body
+      }
+      Reload-Counter
+      $ui_status.Text = "Order #$($order.sequence_no) completed."
     } catch {
       $ui_status.Text = $_.Exception.Message
     }
+  }
+})
+
+# Rider Deliveries Actions
+$ui_btnRiderDispatched.Add_Click({
+  if ($ui_riderDeliveriesList.SelectedItem) {
+    $order = $ui_riderDeliveriesList.SelectedItem.Tag
+    try {
+      $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'PREPARING' }
+      Reload-Counter
+      $ui_status.Text = "Delivery order #$($order.sequence_no) out for delivery."
+    } catch { $ui_status.Text = $_.Exception.Message }
+  }
+})
+
+$ui_btnRiderDelivered.Add_Click({
+  if ($ui_riderDeliveriesList.SelectedItem) {
+    $order = $ui_riderDeliveriesList.SelectedItem.Tag
+    try {
+      $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'COMPLETED'; payment_status = 'PAID' }
+      Reload-Counter
+      $ui_status.Text = "Delivery order #$($order.sequence_no) delivered and marked paid."
+    } catch { $ui_status.Text = $_.Exception.Message }
+  }
+})
+
+# Save System Settings Action
+$ui_btnSaveSettings.Add_Click({
+  try {
+    $settings = @{
+      restaurant_phone = $ui_settingRestaurantPhone.Text.Trim()
+      supplier_marketplace_phone = $ui_settingSupplierPhone.Text.Trim()
+      vendor_phone = $ui_settingVendorPhone.Text.Trim()
+    }
+    $null = Bridge '/counter/settings' 'POST' @{ settings = $settings }
+    $script:supplierPhone = $settings.supplier_marketplace_phone
+    $script:vendorPhone = $settings.vendor_phone
+    $ui_status.Text = "System WhatsApp configuration saved locally and queued for web sync."
+  } catch {
+    $ui_status.Text = "Settings save failed: $($_.Exception.Message)"
   }
 })
 
@@ -1274,7 +1947,7 @@ $ui_btnTestPrinter.Add_Click({
       order_type = "HARDWARE_TEST"
       table_number = "TEST"
       total_amount = 0
-      items = @(@{ name = "Receipt Printer Test Slip"; quantity = 1; price = 0 })
+      items = @(@{ name = "Thermal Printer Hardware Test Slip"; quantity = 1; price = 0 })
       print_type = "RECEIPT"
     }
     $null = Bridge '/print' 'POST' $testTicket
