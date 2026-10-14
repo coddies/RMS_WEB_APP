@@ -1,66 +1,101 @@
 # DESIGN_FINAL.md — UI/UX Design System (v2, supersedes original DESIGN.md)
 
-## 1. Theme
-Black + Red dark theme.
-- `--bg-base`: #0D0D0D / #121212
-- `--bg-surface`: #161B22 / #1E1E24
-- `--primary-accent`: #DC2626 / #8B0000 (dynamic per-tenant override allowed)
+> Comprehensive UI/UX Specification for Restaurant Management System (Web & Native Desktop)
+> Strict rule: Zero AI emojis anywhere in UI or documentation. Professional Ignite POS dark style.
+
+## 1. Visual Theme & Design Tokens
+
+Black + Crimson Red dark theme matching Ignite Smoke-house & Grill POS.
+- `--bg-base`: #0A0A0C (ultra-deep matte obsidian)
+- `--bg-sidebar`: #101217 (sleek dark graphite)
+- `--bg-surface`: #14171F (panel surface)
+- `--bg-surface-elevated`: #1B202B
+- `--border-subtle`: #222736
+- `--border-focus`: #3B445B
+- `--primary-accent`: #DC2626 (crimson red)
+- `--primary-accent-hover`: #EF4444
 - `--text-main`: #F0F0F0
 - `--text-muted`: #8B949E
-- Status colors: Free/Success #10B981, Warning #F59E0B, Occupied/Urgent #EF4444, Info/Billed #3B82F6
-- Font: Inter / system sans-serif
+- Status colors: Free/Success/In-Stock #10B981, Warning/Preparing #F59E0B, Occupied/Sold-Out/Urgent #EF4444, Info/Billed #3B82F6
+- Font: Segoe UI, Inter, system-ui sans-serif
 - Touch targets: minimum 48x48px everywhere
-- Rounded corners 8-12px, subtle card shadows
+- Rounded corners 6-10px, crisp borders
 
-## 2. Screen Inventory
+## 2. Side Dashboard (Unified Left Navigation Shell)
 
-### 2.1 Customer Menu (mobile-first, QR/delivery entry)
-- Logo/name (dynamic per tenant) + Table/Delivery badge
-- Sticky category tabs
-- Item cards with photo, name, price, description, "+" add
-- Special offer items: distinct highlighted card (per selected template style — see 2.4)
-- Bottom sticky cart bar
-- Dine-in checkout: single "Submit Order to Kitchen" button
-- Delivery checkout: Name/Address/Phone fields (with inline validation errors per FR-13) + "Order via WhatsApp" button
-- Privacy Policy link accessible from footer/checkout (per FR-15)
+### 2.1 Brand Header & Terminal Indicator
+- Top Brand Tag: `IGNITE POS | RMS COUNTER` (Crimson #DC2626)
+- Restaurant / Terminal Card: Dark pill container displaying tenant brand name and station identifier (`COUNTER 01 · LOCAL SQLITE`).
 
-### 2.2 Unified Staff Dashboard (single shell, sidebar nav)
-- Sidebar: Orders, Kitchen, Menu, Inventory, Vendors (if enabled), Staff, Reports, Settings
-- Role-based: sidebar items shown/hidden per logged-in role (Feature 07)
-- Same shell for all roles — no separate app/URL to switch between, only the visible sections change
+### 2.2 Navigation Items
+Vertical stack of tactile, high-contrast action tabs:
+1. `Orders (POS)`: Active counter billing, table assignment, payment capture, and thermal receipt printing.
+2. `Kitchen (KDS)`: Live kitchen order tickets pipeline with status progression and elapsed cooking timers.
+3. `Menu Management`: Catalog management, instant in-stock / sold-out toggling, price editing, and cloud sync.
+4. `Special Offers`: Deals, combos, discount scheduling, and promotional banner management.
+5. `Inventory`: Real-time ingredient levels, low-stock threshold alerts, and vendor tracking.
+6. `Staff Accounts`: Local operator profiles, PIN security, role permissions, and cashier shift logs.
+7. `Reports & Settings`: Daily sales totals, end-of-day Z-report printing, terminal pairing keys, and hardware diagnostics.
 
-### 2.3 Menu Management Screen (Admin)
-- Top bar: category filter + "+ Add New Item" button
-- Collapsible category sections, item rows with thumbnail/name/price/stock-toggle/edit/delete
-- Add/Edit panel: photo upload, name, price, category, description, ingredient-linking multi-select
-- Search bar
+- Active State: Crimson red background (#DC2626), white text, bold weight.
+- Inactive State: Dark graphite background (#14171F), light gray text (#F0F0F0), border #252A36.
 
-### 2.4 Create Special Offer Screen (Admin)
-- "+ New Offer" opens modal/panel
-- Step 1: item selection (searchable checklist)
-- Step 2: pick from 4-5 offer card style templates (Flame Badge, Gradient Glow Border, Ribbon Tag, Countdown Banner, Seasonal Frame)
-- Step 3: day-of-week toggle pills (Mon-Sun)
-- Step 4: start/end date-time pickers, or "run indefinitely" toggle
-- Step 5: optional custom badge text
-- Live preview panel
-- Save (red, full-width) / Cancel
+### 2.3 Bottom Staff Card & Fast Role Switcher
+- Staff display name (e.g. `SERVER 01`, `MANAGER ADMIN`).
+- Role pill badge (Admin: Crimson #DC2626, Kitchen: Amber #D97706, Cashier: Emerald #059669).
+- Action Button: `[SWITCH ROLE / LOCK]` which triggers the Fast PIN Keypad modal for instant shift handover without restarting the terminal.
 
-### 2.5 Login Screen
-- Centered card, logo, Phone/Username + PIN/Password, large PIN pad for fast counter entry
+## 3. Fast Lock Screen & Touch Numeric Keypad
 
-### 2.6 Rider Mobile View (PWA)
-- List of assigned deliveries: name, address (tap-to-call), items, single cycling status button (Picked Up -> On the Way -> Delivered)
-- Minimal, one-handed use
+- Terminal lock screen and fast role switch dialog.
+- Selected user / role display.
+- Discrete dot circles for PIN feedback.
+- Large touch-friendly numeric grid:
+  `[ 1 ]` `[ 2 ]` `[ 3 ]`
+  `[ 4 ]` `[ 5 ]` `[ 6 ]`
+  `[ 7 ]` `[ 8 ]` `[ 9 ]`
+  `[ Clear ]` `[ 0 ]` `[ Backspace ]`
+- Action Button: `[ Unlock Terminal ]` (Crimson red #DC2626).
+- Supports physical keyboard numpad and touch input.
 
-### 2.7 Super-Admin Panel
-- Restaurant list table (name, slug, tier, status, renewal date)
-- Add/Edit restaurant form
-- Separate login, separate visual treatment (still black/red, but with a distinct "Platform Admin" header so it's never confused with a restaurant's own dashboard)
+## 4. Screen Modules Inventory
 
-## 3. Responsive Breakpoints
-- Mobile (320-480px): Customer menu, WhatsApp checkout, Rider PWA
-- Tablet (768-1024px): Kitchen KDS, tableside use
-- Desktop (1200px+): Manager dashboard, Cashier counter terminal
+### 4.1 Orders (POS Terminal)
+- Menu catalog list with categories and formatted prices.
+- Table / order reference input.
+- Active cart line items with quantity counters.
+- Save & Print thermal receipt button.
+- Mark Paid button.
+- Incoming online web orders badge and live order tracking.
 
-## 4. Multi-Tenant Theming
-Tenant config JSON (brand_name, logo_url, primary_color, secondary_color, font_family) applied via CSS variables at runtime — same layout/components reused for every restaurant, no per-tenant rebuild.
+### 4.2 Kitchen KDS Screen (Live Order Pipeline)
+3-column Kanban pipeline:
+- Column 1: Received (New incoming tickets, red badge, `[ START COOKING ]`).
+- Column 2: Preparing (Active cooking tickets with elapsed timers, `[ MARK PLATED ]`).
+- Column 3: Pickup / Ready (Completed dishes, `[ HAND OFF / COMPLETE ]` and `[ PRINT KOT ]`).
+- Real-time audible chime on newly arriving dine-in and online orders.
+
+### 4.3 Menu Management Screen
+- Metric summary cards: Total Items, In-Stock (green), Sold-Out (red), Cloud Synced (green).
+- Category accordion sections.
+- Item row layout: name, price in Rs, category tag.
+- Instant stock switch: `[ IN STOCK ]` vs `[ SOLD OUT ]` toggle that immediately syncs across counter and public menu.
+- Item editor modal: item name, price, category selector, in-stock switch.
+- Filter search box with instantaneous name matching.
+
+### 4.4 Special Offers & Promotions Screen
+- Promotion builder: combos, discounts, and banner configuration.
+- Publishing synchronization to both POS terminal and mobile QR menu.
+
+### 4.5 Inventory Screen
+- Raw stock items and unit counts.
+- Low-stock alerts and supplier logs.
+
+### 4.6 Staff Management Screen
+- Local SQLite authentication with hashed PINs.
+- Add staff, change PIN, role assignment, and background cloud sync.
+
+## 5. Pairing Key Architecture
+- Supports 10-character Restaurant Pairing Keys (e.g. `T@3XYCM@6_`) and 64-character tokens.
+- Secure local token storage via Windows DPAPI and local `.env`.
+- Auto-detection across installation directory and Windows service config.

@@ -304,6 +304,111 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/menu") {
       return send(response, 200, { items: db.prepare("SELECT id,name,price,category_id,category_name,image_url,in_stock FROM menu_cache ORDER BY category_name,name").all() });
     }
+    if (request.method === "GET" && url.pathname === "/counter/menu/catalog") {
+      const items = db.prepare("SELECT id,name,price,category_id,category_name,image_url,in_stock FROM menu_cache ORDER BY category_name,name").all();
+      const inStockCount = items.filter((i) => i.in_stock).length;
+      return send(response, 200, {
+        items,
+        total: items.length,
+        in_stock: inStockCount,
+        sold_out: items.length - inStockCount
+      });
+    }
+    if (request.method === "POST" && url.pathname === "/counter/menu/stock") {
+      const body = await readJson(request);
+      if (!body || !body.id) throw new Error("Item ID is required.");
+      const inStock = body.in_stock ? 1 : 0;
+      db.prepare("UPDATE menu_cache SET in_stock=? WHERE id=?").run(inStock, body.id);
+      queueMicrotask(async () => {
+        try {
+          const tenantId = await getTenantId();
+          const key = config.supabaseSecretKey || config.supabaseKey;
+          if (tenantId && key && config.supabaseUrl) {
+            await fetch(`${config.supabaseUrl}/rest/v1/menu_items?id=eq.${encodeURIComponent(body.id)}&tenant_id=eq.${tenantId}`, {
+              method: "PATCH",
+              headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ in_stock: Boolean(body.in_stock) }),
+              signal: AbortSignal.timeout(6000)
+            });
+          }
+        } catch {}
+      });
+      return send(response, 200, { ok: true, id: body.id, in_stock: Boolean(body.in_stock) });
+    }
+    if (request.method === "POST" && url.pathname === "/counter/menu/item") {
+      const body = await readJson(request);
+      if (!body || !body.name || !body.price) throw new Error("Item name and price are required.");
+      const id = body.id || randomUUID();
+      const price = Number(body.price);
+      const categoryName = (body.category_name || "General").trim();
+      const inStock = body.in_stock === false ? 0 : 1;
+      const now = new Date().toISOString();
+      db.prepare("INSERT INTO menu_cache(id,name,price,category_id,category_name,image_url,in_stock,synced_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,price=excluded.price,category_name=excluded.category_name,in_stock=excluded.in_stock,synced_at=excluded.synced_at")
+        .run(id, body.name.trim(), price, body.category_id || id, categoryName, body.image_url || null, inStock, now);
+      queueMicrotask(async () => {
+        try {
+          const tenantId = await getTenantId();
+          const key = config.supabaseSecretKey || config.supabaseKey;
+          if (tenantId && key && config.supabaseUrl) {
+            let catId = body.category_id;
+            if (!catId) {
+              const catRes = await fetch(`${config.supabaseUrl}/rest/v1/menu_categories?tenant_id=eq.${tenantId}&name=eq.${encodeURIComponent(categoryName)}&limit=1`, {
+                headers: { apikey: key, Authorization: `Bearer ${key}` }
+              });
+              const cats = await catRes.json();
+              if (cats?.[0]?.id) {
+                catId = cats[0].id;
+              } else {
+                const newCatRes = await fetch(`${config.supabaseUrl}/rest/v1/menu_categories`, {
+                  method: "POST",
+                  headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=representation" },
+                  body: JSON.stringify({ tenant_id: tenantId, name: categoryName, sort_order: 0 })
+                });
+                const newCats = await newCatRes.json();
+                catId = newCats?.[0]?.id;
+              }
+            }
+            if (catId) {
+              await fetch(`${config.supabaseUrl}/rest/v1/menu_items`, {
+                method: "POST",
+                headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+                body: JSON.stringify({
+                  id,
+                  tenant_id: tenantId,
+                  category_id: catId,
+                  name: body.name.trim(),
+                  price,
+                  description: body.description || null,
+                  in_stock: Boolean(inStock),
+                  image_url: body.image_url || null
+                }),
+                signal: AbortSignal.timeout(8000)
+              });
+            }
+          }
+        } catch {}
+      });
+      return send(response, 200, { ok: true, id, name: body.name.trim(), price, in_stock: Boolean(inStock) });
+    }
+    if (request.method === "POST" && url.pathname === "/counter/menu/delete") {
+      const body = await readJson(request);
+      if (!body || !body.id) throw new Error("Item ID is required.");
+      db.prepare("DELETE FROM menu_cache WHERE id=?").run(body.id);
+      queueMicrotask(async () => {
+        try {
+          const tenantId = await getTenantId();
+          const key = config.supabaseSecretKey || config.supabaseKey;
+          if (tenantId && key && config.supabaseUrl) {
+            await fetch(`${config.supabaseUrl}/rest/v1/menu_items?id=eq.${encodeURIComponent(body.id)}&tenant_id=eq.${tenantId}`, {
+              method: "DELETE",
+              headers: { apikey: key, Authorization: `Bearer ${key}` },
+              signal: AbortSignal.timeout(6000)
+            });
+          }
+        } catch {}
+      });
+      return send(response, 200, { ok: true, id: body.id, deleted: true });
+    }
     if (request.method === "GET" && url.pathname === "/counter/state") {
       const items = db.prepare("SELECT id,name,price,category_id,category_name,image_url,in_stock FROM menu_cache ORDER BY category_name,name").all();
       const orders = db.prepare("SELECT * FROM offline_orders ORDER BY sequence_no DESC LIMIT 200").all().map(formatOrder);
@@ -698,6 +803,44 @@ async function syncCounter() {
           } catch {
             // Offline - order remains PENDING
           }
+        }
+      }
+    }
+    if (config.supabaseUrl && key && config.tenantSlug) {
+      const tenantId = await getTenantId();
+      if (tenantId) {
+        try {
+          const remoteRes = await fetch(
+            `${config.supabaseUrl}/rest/v1/orders?select=id,order_number,order_type,status,total_amount,customer_name,created_at,order_items(quantity,price_at_order,menu_items(name))&tenant_id=eq.${tenantId}&status=in.(PENDING,PREPARING)&order=created_at.desc&limit=50`,
+            {
+              headers: { apikey: key, Authorization: `Bearer ${key}` },
+              signal: AbortSignal.timeout(6000)
+            }
+          );
+          if (remoteRes.ok) {
+            const remoteRows = await remoteRes.json();
+            const formattedRemote = remoteRows.map((o) => ({
+              id: o.id,
+              order_number: o.order_number,
+              order_type: o.order_type,
+              status: o.status,
+              total_amount: o.total_amount,
+              created_at: o.created_at,
+              customer_name: o.customer_name,
+              items: (o.order_items || []).map((oi) => ({
+                name: oi.menu_items?.name || "Item",
+                quantity: oi.quantity,
+                price: oi.price_at_order
+              }))
+            }));
+            const serialized = JSON.stringify(formattedRemote);
+            db.prepare("INSERT INTO sync_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+              .run("counter_remote_data_cashier", serialized);
+            db.prepare("INSERT INTO sync_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+              .run("counter_remote_data_kitchen", serialized);
+          }
+        } catch {
+          // Cloud offline
         }
       }
     }
