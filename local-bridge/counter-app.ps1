@@ -401,6 +401,20 @@ function Show-StaffLogin {
   if ($dialog.ShowDialog()) { return $script:staffSession }; return $null
 }
 
+$script:pinDisplayTextControl = $null
+function Update-PinDisplay {
+  if (-not $script:pinDisplayTextControl) { return }
+  if ($script:keypadPin.Length -eq 0) {
+    $script:pinDisplayTextControl.Text = '○ ○ ○ ○'
+    $script:pinDisplayTextControl.Foreground = ConvertTo-UiBrush '#8B949E'
+  } else {
+    $dots = @()
+    for ($i = 0; $i -lt $script:keypadPin.Length; $i++) { $dots += '●' }
+    $script:pinDisplayTextControl.Text = ($dots -join ' ')
+    $script:pinDisplayTextControl.Foreground = ConvertTo-UiBrush '#DC2626'
+  }
+}
+
 # Fast Lock Screen & Touch Numeric Keypad Modal (as per DESIGN.md & screen mockups)
 function Show-PinKeypadModal {
   $modal = New-Object System.Windows.Window
@@ -451,18 +465,9 @@ function Show-PinKeypadModal {
   $pinDisplayText = New-Object System.Windows.Controls.TextBlock; $pinDisplayText.Text = '○ ○ ○ ○'; $pinDisplayText.FontSize = 22; $pinDisplayText.FontWeight = 'Bold'; $pinDisplayText.Foreground = '#8B949E'; $pinDisplayText.HorizontalAlignment = 'Center'
   $pinDisplayBorder.Child = $pinDisplayText
   $root.Children.Add($pinDisplayBorder)|Out-Null
+  $script:pinDisplayTextControl = $pinDisplayText
+  Update-PinDisplay
 
-  function Update-PinDisplay {
-    if ($script:keypadPin.Length -eq 0) {
-      $pinDisplayText.Text = '○ ○ ○ ○'
-      $pinDisplayText.Foreground = ConvertTo-UiBrush '#8B949E'
-    } else {
-      $dots = @()
-      for ($i = 0; $i -lt $script:keypadPin.Length; $i++) { $dots += '●' }
-      $pinDisplayText.Text = ($dots -join ' ')
-      $pinDisplayText.Foreground = ConvertTo-UiBrush '#DC2626'
-    }
-  }
 
   # 4. Numeric Keypad 3x4 Grid
   $gridKeypad = New-Object System.Windows.Controls.Grid; [System.Windows.Controls.Grid]::SetRow($gridKeypad, 3); $gridKeypad.Margin = '0,0,0,14'

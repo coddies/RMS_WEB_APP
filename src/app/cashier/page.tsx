@@ -1,9 +1,14 @@
-import Cashier from "@/components/Cashier";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { readSession, sessionCookieName } from "@/lib/staff-auth";
+import StaffDashboard from "@/components/StaffDashboard";
+
 export default async function CashierPage() {
-  const session = readSession((await cookies()).get(sessionCookieName)?.value);
-  if (!session || !["cashier", "admin"].includes(session.role)) redirect("/login");
-  return <Cashier />;
+  const cookieStore = await cookies();
+  const session = readSession(cookieStore.get(sessionCookieName)?.value);
+  if (!session || !["cashier", "admin"].includes(session.role)) {
+    redirect("/login");
+  }
+
+  return <StaffDashboard session={session} />;
 }
