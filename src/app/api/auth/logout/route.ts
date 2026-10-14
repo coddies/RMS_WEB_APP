@@ -10,5 +10,5 @@ export async function POST(request: NextRequest) {
       await auth.auth.signOut({ scope: "local" });
     } catch { /* Clearing the browser session still signs this device out. */ }
   }
-  return clearStaffCookie(NextResponse.redirect(new URL("/login", request.url)));
+  return clearStaffCookie(NextResponse.redirect(new URL("/login", request.url), 303));
 }

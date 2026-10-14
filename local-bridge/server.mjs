@@ -92,6 +92,17 @@ db.exec(`
     synced_at TEXT,
     error TEXT
   );
+  CREATE TABLE IF NOT EXISTS sync_queue (
+    id TEXT PRIMARY KEY,
+    table_name TEXT NOT NULL,
+    record_id TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    created_at TEXT NOT NULL,
+    synced_at TEXT,
+    error TEXT
+  );
 `);
 
 for (const [column, definition] of [
@@ -753,6 +764,78 @@ async function syncStaffToCloud() {
   }
 }
 
+let genericSyncRunning = false;
+function enqueueGenericSync(tableName, recordId, operation, payload) {
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO sync_queue(id, table_name, record_id, operation, payload, status, created_at) VALUES(?,?,?,?,?,?,?)")
+    .run(id, tableName, recordId, operation, JSON.stringify(payload), "PENDING", now);
+  queueMicrotask(() => drainGenericSyncQueue().catch(() => {}));
+}
+
+async function drainGenericSyncQueue() {
+  if (genericSyncRunning) return;
+  genericSyncRunning = true;
+  try {
+    const key = config.supabaseSecretKey || config.supabaseKey;
+    if (!config.supabaseUrl || !key || !config.tenantSlug) return;
+    const tenantId = await getTenantId();
+    if (!tenantId) return;
+
+    const pending = db.prepare("SELECT * FROM sync_queue WHERE status='PENDING' ORDER BY created_at ASC LIMIT 50").all();
+    for (const item of pending) {
+      try {
+        const payload = JSON.parse(item.payload);
+        const endpoint = `${config.supabaseUrl}/rest/v1/${encodeURIComponent(item.table_name)}`;
+        let res;
+        if (item.operation === "UPSERT") {
+          res = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              apikey: key,
+              Authorization: `Bearer ${key}`,
+              "Content-Type": "application/json",
+              Prefer: "resolution=merge-duplicates"
+            },
+            body: JSON.stringify({ ...payload, tenant_id: tenantId }),
+            signal: AbortSignal.timeout(8000)
+          });
+        } else if (item.operation === "PATCH") {
+          res = await fetch(`${endpoint}?id=eq.${encodeURIComponent(item.record_id)}&tenant_id=eq.${tenantId}`, {
+            method: "PATCH",
+            headers: {
+              apikey: key,
+              Authorization: `Bearer ${key}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(8000)
+          });
+        } else if (item.operation === "DELETE") {
+          res = await fetch(`${endpoint}?id=eq.${encodeURIComponent(item.record_id)}&tenant_id=eq.${tenantId}`, {
+            method: "DELETE",
+            headers: { apikey: key, Authorization: `Bearer ${key}` },
+            signal: AbortSignal.timeout(8000)
+          });
+        }
+        if (res && !res.ok) {
+          const errText = await res.text();
+          throw new Error(`Sync failed (${res.status}): ${errText}`);
+        }
+        const now = new Date().toISOString();
+        db.prepare("UPDATE sync_queue SET status='SYNCED', synced_at=? WHERE id=?").run(now, item.id);
+      } catch (err) {
+        db.prepare("UPDATE sync_queue SET error=? WHERE id=?").run(err.message, item.id);
+        break;
+      }
+    }
+  } catch {
+    // Cloud offline
+  } finally {
+    genericSyncRunning = false;
+  }
+}
+
 async function syncCounter() {
   if (syncRunning) return;
   syncRunning = true;
@@ -867,12 +950,14 @@ function normalizeOrder(body) {
     return { item_id: item.id, name: item.name, quantity: requested.quantity, price_at_order: Number(item.price) };
   });
   const orderType = body.order_type || "DINE_IN";
-  if (!new Set(["DINE_IN", "DELIVERY"]).has(orderType)) throw new Error("Order type must be DINE_IN or DELIVERY.");
+  if (!new Set(["DINE_IN", "DELIVERY", "PICKUP"]).has(orderType)) throw new Error("Order type must be DINE_IN, DELIVERY, or PICKUP.");
   const tableNumber = typeof body.table_number === "string" ? body.table_number.trim() : "";
   if (orderType === "DINE_IN" && !tableNumber) throw new Error("Enter a table number for dine-in orders.");
   const customerName = typeof body.customer_name === "string" ? body.customer_name.trim() : "";
   const customerPhone = typeof body.customer_phone === "string" ? body.customer_phone.trim() : "";
   const customerAddress = typeof body.customer_address === "string" ? body.customer_address.trim() : "";
+  if (orderType === "DELIVERY" && !customerAddress) throw new Error("Enter a delivery address.");
+  if (orderType === "PICKUP" && !customerPhone) throw new Error("Enter a contact phone number for pickup.");
   const staffId = typeof body.staff_id === "string" ? body.staff_id.trim() : null;
   const staffName = typeof body.staff_name === "string" ? body.staff_name.trim() : null;
   return {

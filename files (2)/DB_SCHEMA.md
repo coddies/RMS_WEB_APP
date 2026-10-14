@@ -82,7 +82,7 @@ orders
   tenant_id UUID FK -> tenants
   order_number BIGSERIAL -- human-readable, for receipts/customer reference
   table_id UUID NULLABLE FK -> restaurant_tables
-  order_type VARCHAR -- 'DINE_IN' | 'DELIVERY'
+  order_type VARCHAR -- 'DINE_IN' | 'DELIVERY' | 'PICKUP'
   status VARCHAR -- 'PENDING' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED'
   customer_name VARCHAR NULLABLE
   customer_phone VARCHAR NULLABLE
@@ -113,6 +113,24 @@ special_offers
   start_at TIMESTAMPTZ NULLABLE
   end_at TIMESTAMPTZ NULLABLE
   run_indefinitely BOOLEAN DEFAULT FALSE
+
+supply_products (Software Provider Marketplace)
+  id UUID PK
+  category VARCHAR
+  name VARCHAR
+  description TEXT
+  image_url TEXT
+  price DECIMAL(10,2) NULLABLE -- Contact for price if null
+  active BOOLEAN DEFAULT TRUE
+  created_at TIMESTAMPTZ
+
+stock_orders
+  id UUID PK
+  tenant_id UUID FK -> tenants
+  items JSONB -- [{ product_id, name, qty, price }]
+  total_amount DECIMAL(10,2) NULLABLE
+  status VARCHAR -- 'PENDING' | 'CONFIRMED' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED'
+  created_at TIMESTAMPTZ
 ```
 
 `order_items` has composite foreign keys `(tenant_id, order_id)` and `(tenant_id, menu_item_id)` so the order and menu item must belong to the same tenant. A database trigger derives `tenant_id` and rejects mismatches, including writes made by the privileged server client.

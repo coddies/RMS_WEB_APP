@@ -105,7 +105,23 @@ function Save-StaffSession($Value) {
 function Bridge([string]$Path, [string]$Method = 'GET', $Body = $null) {
   $params = @{ Uri = "$bridge$Path"; Method = $Method; Headers = @{ 'X-RMS-Bridge-Token' = $script:token }; TimeoutSec = 5 }
   if ($null -ne $Body) { $params.ContentType = 'application/json'; $params.Body = ($Body | ConvertTo-Json -Depth 8 -Compress) }
-  Invoke-RestMethod @params
+  try {
+    return (Invoke-RestMethod @params)
+  } catch {
+    $errObj = $null
+    if ($_.Exception.Response) {
+      try {
+        $stream = $_.Exception.Response.GetResponseStream()
+        $reader = New-Object System.IO.StreamReader($stream)
+        $respBody = $reader.ReadToEnd()
+        $errObj = $respBody | ConvertFrom-Json
+      } catch { }
+    }
+    if ($errObj -and $errObj.error) {
+      throw $errObj.error
+    }
+    throw $_.Exception.Message
+  }
 }
 
 function Set-AppWindowIcon($Window) {
