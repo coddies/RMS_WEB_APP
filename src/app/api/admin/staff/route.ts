@@ -107,7 +107,14 @@ export async function POST(request: NextRequest) {
 
     return respond(NextResponse.json({ ok: true, id: staffId }), auth);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to save staff account." }, { status: 500 });
+    const rawMsg = error instanceof Error ? error.message : "Failed to save staff account.";
+    if (rawMsg.includes("duplicate key") || rawMsg.includes("unique") || rawMsg.includes("users_username") || rawMsg.includes("users_tenant_id_username")) {
+      return NextResponse.json(
+        { error: `The username is already taken. Please enter a different, unique username (e.g. admin2, manager1, cashier1).` },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: rawMsg }, { status: 500 });
   }
 }
 

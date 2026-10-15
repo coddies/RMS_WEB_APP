@@ -3398,8 +3398,12 @@ export default function StaffDashboard({ session: initialSession }: { session: S
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(staffForm)
                   });
-                  if (!res.ok) throw new Error("Could not save staff.");
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.error || "Could not save staff.");
                   setShowStaffModal(false);
+                  setStaffForm({ name: "", username: "", role: "cashier", pin: "" });
+                  setDashboardNotice(`Staff operator ${staffForm.name} created successfully!`);
+                  setTimeout(() => setDashboardNotice(""), 3500);
                   void loadStaff();
                 } catch (err) {
                   alert(err instanceof Error ? err.message : "Error");
