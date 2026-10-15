@@ -156,12 +156,14 @@ for (const [column, definition] of [
   ["staff_id", "TEXT"],
   ["staff_name", "TEXT"],
   ["rider_id", "TEXT"],
-  ["rider_name", "TEXT"]
+  ["rider_name", "TEXT"],
+  ["approved", "INTEGER NOT NULL DEFAULT 0"]
 ]) {
   if (!db.prepare("PRAGMA table_info(offline_orders)").all().some((row) => row.name === column)) {
     db.exec(`ALTER TABLE offline_orders ADD COLUMN ${column} ${definition}`);
   }
 }
+db.exec("UPDATE offline_orders SET approved = 1 WHERE counter_status IN ('PREPARING', 'READY', 'COMPLETED') AND approved = 0");
 
 function hashPin(pin) {
   const salt = randomBytes(16).toString("hex");
@@ -509,9 +511,18 @@ const server = createServer(async (request, response) => {
       if (body.payment_status !== undefined && !new Set(["PENDING", "PAID"]).has(body.payment_status)) throw new Error("Invalid payment status.");
       const row = db.prepare("SELECT * FROM offline_orders WHERE client_order_id=?").get(body.client_order_id);
       if (!row) return send(response, 404, { error: "Local order was not found." });
-      db.prepare("UPDATE offline_orders SET counter_status=COALESCE(?,counter_status),payment_status=COALESCE(?,payment_status) WHERE client_order_id=?")
-        .run(body.counter_status ?? null, body.payment_status ?? null, body.client_order_id);
+      db.prepare("UPDATE offline_orders SET counter_status=COALESCE(?,counter_status),payment_status=COALESCE(?,payment_status),approved=COALESCE(?,approved) WHERE client_order_id=?")
+        .run(body.counter_status ?? null, body.payment_status ?? null, body.approved !== undefined ? (body.approved ? 1 : 0) : null, body.client_order_id);
       return send(response, 200, formatOrder(db.prepare("SELECT * FROM offline_orders WHERE client_order_id=?").get(body.client_order_id)));
+    }
+
+    if (request.method === "POST" && url.pathname === "/counter/orders/approve") {
+      const body = await readJson(request);
+      if (typeof body.client_order_id !== "string") throw new Error("A local order id is required.");
+      const row = db.prepare("SELECT * FROM offline_orders WHERE client_order_id=?").get(body.client_order_id);
+      if (!row) return send(response, 404, { error: "Local order was not found." });
+      db.prepare("UPDATE offline_orders SET approved=1 WHERE client_order_id=?").run(body.client_order_id);
+      return send(response, 200, { ok: true, approved: 1, ...formatOrder(db.prepare("SELECT * FROM offline_orders WHERE client_order_id=?").get(body.client_order_id)) });
     }
 
     if (request.method === "POST" && url.pathname === "/orders") {

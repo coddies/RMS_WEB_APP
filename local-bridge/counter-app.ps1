@@ -1,4 +1,4 @@
-﻿Add-Type -AssemblyName PresentationFramework
+Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
 
@@ -787,76 +787,133 @@ $xaml = @'
    <!-- RIGHT CONTENT PANES -->
    <Grid Grid.Column="1">
     <!-- CASHIER PANE (ORDERS) -->
-    <Grid Name="cashierPane" Margin="4,0,0,0">
-     <Grid.ColumnDefinitions><ColumnDefinition Width="1.1*"/><ColumnDefinition Width="0.9*"/></Grid.ColumnDefinitions>
-     
-     <!-- Menu Catalog -->
-     <DockPanel Grid.Column="0" Margin="0,0,16,0">
-      <TextBlock DockPanel.Dock="Top" Text="Menu Catalog  -  Double-click to add item to active order" Foreground="#8B949E" Margin="0,0,0,10"/>
-      <ListBox Name="menuList" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#222736"/>
-     </DockPanel>
+    <DockPanel Name="cashierPane" Margin="4,0,0,0">
+     <!-- Metric Bar & Filter Tabs -->
+     <Border DockPanel.Dock="Top" Background="#161B22" CornerRadius="8" Padding="12" Margin="0,0,0,10" BorderBrush="#222736" BorderThickness="1">
+      <DockPanel>
+       <!-- Right: Search, Avg Wait, + New Order -->
+       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+        <TextBox Name="ordersSearchBox" Width="200" Height="38" Padding="8" Margin="0,0,8,0" Background="#0D0D0D" Foreground="#F0F0F0" BorderBrush="#2C3240"/>
+        <Border Background="#0D0D0D" CornerRadius="6" Padding="10,6" Margin="0,0,8,0">
+         <TextBlock Name="ordersAvgWait" Text="Avg Wait: 11m 14s" Foreground="#8B949E" FontSize="12" VerticalAlignment="Center"/>
+        </Border>
+        <Button Name="btnTogglePosComposer" Content="+ New POS Order" Height="38" Padding="12,0" Background="#DC2626" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
+       </StackPanel>
+       <!-- Left: Filter Tabs -->
+       <StackPanel Orientation="Horizontal">
+        <Button Name="btnFilterAll" Content="All" Height="38" Padding="16,0" Margin="0,0,6,0" Background="#DC2626" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
+        <Button Name="btnFilterDineIn" Content="Dine-In" Height="38" Padding="14,0" Margin="0,0,6,0" Background="#1A1E29" Foreground="#8B949E" BorderBrush="#2C3240"/>
+        <Button Name="btnFilterDelivery" Content="Delivery" Height="38" Padding="14,0" Margin="0,0,6,0" Background="#1A1E29" Foreground="#8B949E" BorderBrush="#2C3240"/>
+        <Button Name="btnFilterUrgent" Content="Urgent (>15m)" Height="38" Padding="14,0" Background="#1A1E29" Foreground="#EF4444" BorderBrush="#2C3240"/>
+       </StackPanel>
+      </DockPanel>
+     </Border>
 
-     <!-- Order Composer & Active Orders -->
-     <DockPanel Grid.Column="1">
-      <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-       <TextBlock Text="ORDER TYPE &amp; CUSTOMER DETAILS" Foreground="#DC2626" FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
-       
-       <!-- Order Type Selector -->
-       <Grid Margin="0,0,0,8">
-        <Grid.ColumnDefinitions>
-         <ColumnDefinition Width="*"/>
-         <ColumnDefinition Width="*"/>
-         <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
-        <Button Name="btnTypeDineIn" Grid.Column="0" Content="Dine-In" Height="34" Margin="0,0,4,0" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
-        <Button Name="btnTypeDelivery" Grid.Column="1" Content="Delivery" Height="34" Margin="2,0,2,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2C3240" FontWeight="Bold"/>
-        <Button Name="btnTypePickup" Grid.Column="2" Content="Pickup" Height="34" Margin="4,0,0,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2C3240" FontWeight="Bold"/>
-       </Grid>
+     <!-- Active Station Footer Ledger -->
+     <Border DockPanel.Dock="Bottom" Background="#161B22" CornerRadius="8" Padding="12" Margin="0,10,0,0" BorderBrush="#222736" BorderThickness="1">
+      <DockPanel>
+       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+        <Button Name="btnSyncAllTickets" Content="Sync All Tickets" Height="34" Padding="14,0" Background="#DC2626" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
+       </StackPanel>
+       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <Border Background="#EF4444" Width="8" Height="8" CornerRadius="4" Margin="0,0,6,0"/>
+        <TextBlock Name="lblDelayedCount" Text="Delayed > 15m (0)" Foreground="#8B949E" FontSize="12" Margin="0,0,16,0"/>
+        <Border Background="#F59E0B" Width="8" Height="8" CornerRadius="4" Margin="0,0,6,0"/>
+        <TextBlock Name="lblCookingCount" Text="In Kitchen (0)" Foreground="#8B949E" FontSize="12" Margin="0,0,16,0"/>
+        <Border Background="#10B981" Width="8" Height="8" CornerRadius="4" Margin="0,0,6,0"/>
+        <TextBlock Name="lblReadyCount" Text="Ready for Service (0)" Foreground="#8B949E" FontSize="12"/>
+       </StackPanel>
+      </DockPanel>
+     </Border>
 
-       <!-- Context Inputs -->
-       <TextBlock Name="lblReference" Text="Table Number (e.g. T-01, Table 4)" Foreground="#8B949E" FontSize="11" Margin="0,2,0,2"/>
-       <TextBox Name="table" Height="36" Margin="0,0,0,6" Padding="8" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#2C3240"/>
-       
-       <TextBlock Name="lblCustomer" Text="Customer Name &amp; Phone (Optional for Dine-In)" Foreground="#8B949E" FontSize="11" Margin="0,0,0,2"/>
-       <Grid Margin="0,0,0,6">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-        <TextBox Name="custName" Grid.Column="0" Height="36" Margin="0,0,4,0" Padding="8" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#2C3240"/>
-        <TextBox Name="custPhone" Grid.Column="1" Height="36" Margin="4,0,0,0" Padding="8" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#2C3240"/>
-       </Grid>
+     <!-- Center Grid: Order Cards ScrollViewer & Side POS Composer -->
+     <Grid>
+      <Grid.ColumnDefinitions>
+       <ColumnDefinition Width="*"/>
+       <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
 
-       <TextBlock Name="lblAddress" Text="Delivery Address" Foreground="#8B949E" FontSize="11" Margin="0,0,0,2" Visibility="Collapsed"/>
-       <TextBox Name="custAddress" Height="36" Margin="0,0,0,8" Padding="8" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#2C3240" Visibility="Collapsed"/>
+      <!-- Cards Grid ScrollViewer -->
+      <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+       <WrapPanel Name="ordersWrapPanel" ItemWidth="350"/>
+      </ScrollViewer>
 
-       <TextBlock Name="cartSummary" Text="Active Cart: 0 items (Rs 0)" Foreground="#10B981" FontWeight="Bold" FontSize="12" Margin="0,0,0,6"/>
-       <Button Name="placeOrder" Content="Save Order &amp; Print Ticket" Height="44" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
-       
-       <TextBlock Text="Active Terminal Orders" Foreground="#8B949E" FontSize="12" FontWeight="Bold" Margin="0,12,0,4"/>
-      </StackPanel>
+      <!-- Collapsible POS Composer Drawer -->
+      <Border Name="posComposerBorder" Grid.Column="1" Width="360" Background="#161B22" BorderBrush="#222736" BorderThickness="1,0,0,0" Padding="12" Visibility="Collapsed">
+       <DockPanel>
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+         <Button Name="btnClosePosComposer" DockPanel.Dock="Right" Content="X" Width="28" Height="28" Background="#1A1E29" Foreground="#8B949E" BorderThickness="0"/>
+         <TextBlock Text="CREATE POS ORDER" Foreground="#DC2626" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+        </DockPanel>
 
-      <ListBox Name="ordersList" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#222736"/>
+        <!-- Order Form Top -->
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+         <Grid Margin="0,0,0,6">
+          <Grid.ColumnDefinitions>
+           <ColumnDefinition Width="*"/>
+           <ColumnDefinition Width="*"/>
+           <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+          <Button Name="btnTypeDineIn" Grid.Column="0" Content="Dine-In" Height="32" Margin="0,0,2,0" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="11"/>
+          <Button Name="btnTypeDelivery" Grid.Column="1" Content="Delivery" Height="32" Margin="2,0,2,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2C3240" FontWeight="Bold" FontSize="11"/>
+          <Button Name="btnTypePickup" Grid.Column="2" Content="Pickup" Height="32" Margin="2,0,0,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2C3240" FontWeight="Bold" FontSize="11"/>
+         </Grid>
 
-      <!-- Context Actions on Selected Order -->
-      <Grid DockPanel.Dock="Bottom" Margin="0,8,0,0">
-       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="*"/>
-       </Grid.ColumnDefinitions>
-       <Button Name="paid" Grid.Column="0" Content="Mark Order Paid" Height="42" Margin="0,0,4,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2E3547" FontWeight="SemiBold"/>
-       <Button Name="btnContextAction" Grid.Column="1" Content="Action (Serve/Rider)" Height="42" Margin="4,0,0,0" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
-      </Grid>
-     </DockPanel>
-    </Grid>
+         <TextBlock Name="lblReference" Text="Table Number" Foreground="#8B949E" FontSize="11" Margin="0,2,0,2"/>
+         <TextBox Name="table" Height="32" Margin="0,0,0,4" Padding="6" Background="#0D0D0D" Foreground="#F0F0F0" BorderBrush="#2C3240"/>
+         
+         <TextBlock Name="lblCustomer" Text="Customer Name &amp; Phone" Foreground="#8B949E" FontSize="11" Margin="0,2,0,2"/>
+         <Grid Margin="0,0,0,4">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+          <TextBox Name="custName" Grid.Column="0" Height="32" Margin="0,0,2,0" Padding="6" Background="#0D0D0D" Foreground="#F0F0F0" BorderBrush="#2C3240"/>
+          <TextBox Name="custPhone" Grid.Column="1" Height="32" Margin="2,0,0,0" Padding="6" Background="#0D0D0D" Foreground="#F0F0F0" BorderBrush="#2C3240"/>
+         </Grid>
+
+         <TextBlock Name="lblAddress" Text="Delivery Address" Foreground="#8B949E" FontSize="11" Margin="0,2,0,2" Visibility="Collapsed"/>
+         <TextBox Name="custAddress" Height="32" Margin="0,0,0,4" Padding="6" Background="#0D0D0D" Foreground="#F0F0F0" BorderBrush="#2C3240" Visibility="Collapsed"/>
+
+         <TextBlock Name="cartSummary" Text="Active Cart: 0 items (Rs 0)" Foreground="#10B981" FontWeight="Bold" FontSize="11" Margin="0,4,0,4"/>
+         <Button Name="placeOrder" Content="Save Order &amp; Hand Off" Height="38" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
+        </StackPanel>
+
+        <!-- Menu items list for adding -->
+        <TextBlock DockPanel.Dock="Top" Text="Double-click item to add to cart:" Foreground="#8B949E" FontSize="10" Margin="0,4,0,2"/>
+        <ListBox Name="menuList" Background="#0D0D0D" Foreground="#F0F0F0" BorderBrush="#222736"/>
+       </DockPanel>
+      </Border>
+     </Grid>
+    </DockPanel>
 
     <!-- KITCHEN PANE (KDS) -->
     <DockPanel Name="kitchenPane" Margin="4,0,0,0" Visibility="Collapsed">
-     <TextBlock DockPanel.Dock="Top" Text="Kitchen Order Tickets (KDS Pipeline: PENDING -> PREPARING -> READY -> COMPLETED)" Foreground="#8B949E" Margin="0,0,0,10"/>
-     <ListBox Name="kitchenList" Background="#12141C" Foreground="#F0F0F0" BorderBrush="#222736"/>
-     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-      <Button Name="printTicket" Content="Print KOT" Height="44" MinWidth="110" Margin="0,0,8,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2E3547"/>
-      <Button Name="preparing" Content="Start Cooking" Height="44" MinWidth="130" Margin="0,0,8,0" Background="#DC2626" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
-      <Button Name="ready" Content="Mark Ready" Height="44" MinWidth="120" Margin="0,0,8,0" Background="#1A1E29" Foreground="#F0F0F0" BorderBrush="#2E3547" FontWeight="Bold"/>
-      <Button Name="btnKitchenComplete" Content="Mark Served [OK]" Height="44" MinWidth="130" Background="#10B981" Foreground="White" BorderThickness="0" FontWeight="Bold"/>
-     </StackPanel>
+     <!-- Metric Bar & Filter Tabs -->
+     <Border DockPanel.Dock="Top" Background="#161B22" CornerRadius="8" Padding="12" Margin="0,0,0,10" BorderBrush="#222736" BorderThickness="1">
+      <DockPanel>
+       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+        <Border Background="#0D0D0D" CornerRadius="6" Padding="10,6">
+         <TextBlock Text="KDS ACTIVE" Foreground="#10B981" FontWeight="Bold" FontSize="12"/>
+        </Border>
+       </StackPanel>
+       <StackPanel Orientation="Horizontal">
+        <Button Name="btnKitchenFilterAll" Content="All Tickets" Height="38" Padding="16,0" Margin="0,0,6,0" Background="#DC2626" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
+        <Button Name="btnKitchenFilterQueued" Content="Queued" Height="38" Padding="14,0" Margin="0,0,6,0" Background="#1A1E29" Foreground="#8B949E" BorderBrush="#2C3240"/>
+        <Button Name="btnKitchenFilterCooking" Content="Cooking" Height="38" Padding="14,0" Margin="0,0,6,0" Background="#1A1E29" Foreground="#8B949E" BorderBrush="#2C3240"/>
+        <Button Name="btnKitchenFilterReady" Content="Ready" Height="38" Padding="14,0" Background="#1A1E29" Foreground="#8B949E" BorderBrush="#2C3240"/>
+       </StackPanel>
+      </DockPanel>
+     </Border>
+
+     <!-- Kitchen Station Footer Ledger -->
+     <Border DockPanel.Dock="Bottom" Background="#161B22" CornerRadius="8" Padding="12" Margin="0,10,0,0" BorderBrush="#222736" BorderThickness="1">
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+       <TextBlock Text="KDS PIPELINE: QUEUED (Pending) -> COOKING (Preparing) -> READY" Foreground="#8B949E" FontSize="12"/>
+      </StackPanel>
+     </Border>
+
+     <!-- Kitchen Tickets Cards Grid -->
+     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <WrapPanel Name="kitchenWrapPanel" ItemWidth="350"/>
+     </ScrollViewer>
     </DockPanel>
 
     <!-- MENU MANAGEMENT PANE -->
@@ -1038,6 +1095,18 @@ $xaml = @'
    </Grid>
   </Grid>
 
+  <!-- CORNER NEW ORDER TOAST NOTIFICATION -->
+  <Border Name="orderToast" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,24,24" Background="#161B22" BorderBrush="#DC2626" BorderThickness="2" CornerRadius="8" Padding="16" MinWidth="280" MaxWidth="360" Panel.ZIndex="999" Visibility="Collapsed">
+   <StackPanel>
+    <DockPanel Margin="0,0,0,4">
+     <TextBlock Text="NEW ORDER RECEIVED" Foreground="#DC2626" FontWeight="Bold" FontSize="11"/>
+     <Button Name="btnDismissToast" DockPanel.Dock="Right" Content="X" Width="20" Height="20" Background="Transparent" Foreground="#8B949E" BorderThickness="0"/>
+    </DockPanel>
+    <TextBlock Name="toastTitle" Text="#ORD-1082 (Dine-In)" Foreground="White" FontWeight="Bold" FontSize="14" Margin="0,0,0,2"/>
+    <TextBlock Name="toastDetails" Text="Table #05 - 3 items - Rs 1,450" Foreground="#8B949E" FontSize="12"/>
+   </StackPanel>
+  </Border>
+
   <!-- BOTTOM STATUS BAR -->
   <TextBlock Name="status" Grid.Row="2" Text="Ready" Foreground="#8B949E" Margin="0,12,0,0" TextWrapping="Wrap"/>
  </Grid>
@@ -1078,7 +1147,11 @@ $ctrlNames = @(
   'marketCartSummary','btnSubmitMarketOrder','btnClearMarketCart',
   'btnRiderDispatched','btnRiderDelivered',
   'reportSalesSummary','reportTerminalInfo','btnPrintZReport','btnTestPrinter',
-  'settingRestaurantPhone','settingSupplierPhone','settingVendorPhone','btnSaveSettings'
+  'settingRestaurantPhone','settingSupplierPhone','settingVendorPhone','btnSaveSettings',
+  'ordersWrapPanel','kitchenWrapPanel','ordersSearchBox','ordersAvgWait','btnTogglePosComposer','btnClosePosComposer','posComposerBorder',
+  'btnFilterAll','btnFilterDineIn','btnFilterDelivery','btnFilterUrgent','lblDelayedCount','lblCookingCount','lblReadyCount','btnSyncAllTickets',
+  'btnKitchenFilterAll','btnKitchenFilterQueued','btnKitchenFilterCooking','btnKitchenFilterReady',
+  'orderToast','toastTitle','toastDetails','btnDismissToast'
 )
 foreach ($name in $ctrlNames) {
   Set-Variable -Scope Script -Name "ui_$name" -Value $window.FindName($name)
@@ -1086,6 +1159,10 @@ foreach ($name in $ctrlNames) {
 
 $script:activeRole = [string]$script:staffSession.role
 $script:activeOrderType = 'DINE_IN'
+$script:ordersFilter = 'ALL'
+$script:kitchenFilter = 'ALL'
+$script:ordersSearchQuery = ''
+$script:toastTimer = $null
 $script:seenOrderKeys = New-Object 'System.Collections.Generic.HashSet[string]'
 $script:hasInitializedOrders = $false
 $script:supplyProducts = @()
@@ -1353,79 +1430,785 @@ function Reload-RiderDeliveries {
   }
 }
 
+function Show-OrderToast($order) {
+  if (-not $ui_orderToast) { return }
+  try {
+    $num = if ($order.sequence_no) { "#$($order.sequence_no)" } elseif ($order.order_number) { "#$($order.order_number)" } else { "NEW ORDER" }
+    $type = if ($order.order_type) { $order.order_type } else { "DINE_IN" }
+    $info = if ($order.table_number) { "Table $($order.table_number)" } elseif ($order.customer_name) { "$($order.customer_name)" } else { "" }
+    $itemCount = if ($order.items) { @($order.items).Count } else { 0 }
+    $total = if ($order.total_amount) { "Rs $($order.total_amount)" } else { "" }
+
+    $ui_toastTitle.Text = "$num ($type)"
+    $ui_toastDetails.Text = "$info - $itemCount item(s) - $total"
+    $ui_orderToast.Visibility = 'Visible'
+    
+    # Play single short notification sound
+    try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
+
+    # Auto-dismiss after 5.5s
+    if ($script:toastTimer) { $script:toastTimer.Stop() }
+    $script:toastTimer = New-Object System.Windows.Threading.DispatcherTimer
+    $script:toastTimer.Interval = [TimeSpan]::FromSeconds(5.5)
+    $script:toastTimer.Add_Tick({
+      $script:toastTimer.Stop()
+      $ui_orderToast.Visibility = 'Collapsed'
+    })
+    $script:toastTimer.Start()
+  } catch {}
+}
+
+function Set-OrdersFilterUI([string]$filter) {
+  $script:ordersFilter = $filter
+  $defaultBg = '#1A1E29'
+  $defaultFg = '#8B949E'
+  $activeBg = '#DC2626'
+  $activeFg = 'White'
+
+  if ($ui_btnFilterAll) { $ui_btnFilterAll.Background = $defaultBg; $ui_btnFilterAll.Foreground = $defaultFg }
+  if ($ui_btnFilterDineIn) { $ui_btnFilterDineIn.Background = $defaultBg; $ui_btnFilterDineIn.Foreground = $defaultFg }
+  if ($ui_btnFilterDelivery) { $ui_btnFilterDelivery.Background = $defaultBg; $ui_btnFilterDelivery.Foreground = $defaultFg }
+  if ($ui_btnFilterUrgent) { $ui_btnFilterUrgent.Background = $defaultBg; $ui_btnFilterUrgent.Foreground = '#EF4444' }
+
+  if ($filter -eq 'ALL' -and $ui_btnFilterAll) { $ui_btnFilterAll.Background = $activeBg; $ui_btnFilterAll.Foreground = $activeFg }
+  elseif ($filter -eq 'DINE_IN' -and $ui_btnFilterDineIn) { $ui_btnFilterDineIn.Background = $activeBg; $ui_btnFilterDineIn.Foreground = $activeFg }
+  elseif ($filter -eq 'DELIVERY' -and $ui_btnFilterDelivery) { $ui_btnFilterDelivery.Background = $activeBg; $ui_btnFilterDelivery.Foreground = $activeFg }
+  elseif ($filter -eq 'URGENT' -and $ui_btnFilterUrgent) { $ui_btnFilterUrgent.Background = $activeBg; $ui_btnFilterUrgent.Foreground = $activeFg }
+
+  Render-OrdersCards
+}
+
+function Set-KitchenFilterUI([string]$filter) {
+  $script:kitchenFilter = $filter
+  $defaultBg = '#1A1E29'
+  $defaultFg = '#8B949E'
+  $activeBg = '#DC2626'
+  $activeFg = 'White'
+
+  if ($ui_btnKitchenFilterAll) { $ui_btnKitchenFilterAll.Background = $defaultBg; $ui_btnKitchenFilterAll.Foreground = $defaultFg }
+  if ($ui_btnKitchenFilterQueued) { $ui_btnKitchenFilterQueued.Background = $defaultBg; $ui_btnKitchenFilterQueued.Foreground = $defaultFg }
+  if ($ui_btnKitchenFilterCooking) { $ui_btnKitchenFilterCooking.Background = $defaultBg; $ui_btnKitchenFilterCooking.Foreground = $defaultFg }
+  if ($ui_btnKitchenFilterReady) { $ui_btnKitchenFilterReady.Background = $defaultBg; $ui_btnKitchenFilterReady.Foreground = $defaultFg }
+
+  if ($filter -eq 'ALL' -and $ui_btnKitchenFilterAll) { $ui_btnKitchenFilterAll.Background = $activeBg; $ui_btnKitchenFilterAll.Foreground = $activeFg }
+  elseif ($filter -eq 'QUEUED' -and $ui_btnKitchenFilterQueued) { $ui_btnKitchenFilterQueued.Background = $activeBg; $ui_btnKitchenFilterQueued.Foreground = $activeFg }
+  elseif ($filter -eq 'COOKING' -and $ui_btnKitchenFilterCooking) { $ui_btnKitchenFilterCooking.Background = $activeBg; $ui_btnKitchenFilterCooking.Foreground = $activeFg }
+  elseif ($filter -eq 'READY' -and $ui_btnKitchenFilterReady) { $ui_btnKitchenFilterReady.Background = $activeBg; $ui_btnKitchenFilterReady.Foreground = $activeFg }
+
+  Render-KitchenCards
+}
+
+function Render-OrdersCards {
+  if (-not $ui_ordersWrapPanel) { return }
+  $ui_ordersWrapPanel.Children.Clear()
+
+  $allOrders = @($script:orders)
+  foreach ($ro in $script:remoteOrders) {
+    if (-not ($allOrders | Where-Object { $_.client_order_id -eq $ro.id -or $_.sequence_no -eq $ro.order_number })) {
+      $allOrders += [pscustomobject]@{
+        client_order_id = $ro.id
+        sequence_no = $ro.order_number
+        order_type = if ($ro.order_type) { $ro.order_type } else { 'DINE_IN' }
+        table_number = $ro.table_number
+        customer_name = $ro.customer_name
+        customer_phone = $ro.customer_phone
+        customer_address = $ro.customer_address
+        total_amount = $ro.total_amount
+        counter_status = if ($ro.status) { $ro.status } else { 'PENDING' }
+        payment_status = if ($ro.payment_status) { $ro.payment_status } else { 'PENDING' }
+        created_at = $ro.created_at
+        items = $ro.items
+        approved = if ($ro.status -in @('PREPARING', 'READY', 'COMPLETED')) { 1 } else { 0 }
+      }
+    }
+  }
+
+  $delayedCount = 0
+  $cookingCount = 0
+  $readyCount = 0
+  $totalWaitSec = 0
+  $activeCount = 0
+
+  $now = [DateTime]::UtcNow
+
+  foreach ($order in $allOrders) {
+    $orderTime = $now
+    if ($order.created_at) {
+      $parsedTime = [DateTime]::MinValue
+      if ([DateTime]::TryParse($order.created_at, [ref]$parsedTime)) {
+        $orderTime = $parsedTime.ToUniversalTime()
+      }
+    }
+    $age = $now - $orderTime
+    if ($age.TotalSeconds -lt 0) { $age = [TimeSpan]::Zero }
+    $totalMinutes = [int]$age.TotalMinutes
+    $remSeconds = [int]$age.Seconds
+    $ageText = "${totalMinutes}m ${remSeconds}s"
+
+    $isDelayed = ($totalMinutes -ge 15 -and $order.counter_status -notin @('COMPLETED', 'CANCELLED'))
+    if ($isDelayed) { $delayedCount++ }
+    if ($order.counter_status -eq 'PREPARING') { $cookingCount++ }
+    if ($order.counter_status -eq 'READY') { $readyCount++ }
+
+    if ($order.counter_status -notin @('COMPLETED', 'CANCELLED')) {
+      $totalWaitSec += $age.TotalSeconds
+      $activeCount++
+    }
+
+    # Filter tab
+    if ($script:ordersFilter -eq 'DINE_IN' -and $order.order_type -ne 'DINE_IN') { continue }
+    if ($script:ordersFilter -eq 'DELIVERY' -and $order.order_type -notin @('DELIVERY', 'PICKUP')) { continue }
+    if ($script:ordersFilter -eq 'URGENT' -and -not $isDelayed) { continue }
+
+    # Search filter
+    if ($script:ordersSearchQuery) {
+      $q = $script:ordersSearchQuery.ToLower()
+      $matchSeq = "$($order.sequence_no)".Contains($q)
+      $matchTbl = "$($order.table_number)".ToLower().Contains($q)
+      $matchCust = "$($order.customer_name) $($order.customer_phone)".ToLower().Contains($q)
+      $matchItems = (($order.items | ForEach-Object { $_.name }) -join ' ').ToLower().Contains($q)
+      if (-not ($matchSeq -or $matchTbl -or $matchCust -or $matchItems)) { continue }
+    }
+
+    $card = New-Object System.Windows.Controls.Border
+    $card.Width = 338
+    $card.Margin = '6'
+    $card.Background = ConvertTo-UiBrush '#161B22'
+    $card.BorderBrush = if ($isDelayed) { ConvertTo-UiBrush '#920703' } else { ConvertTo-UiBrush '#222736' }
+    $card.BorderThickness = '1'
+    $card.CornerRadius = '8'
+
+    $cardLayout = New-Object System.Windows.Controls.DockPanel
+    $card.Child = $cardLayout
+
+    # 1. Top Ribbon
+    $ribbon = New-Object System.Windows.Controls.Border
+    $ribbon.CornerRadius = '8,8,0,0'
+    $ribbon.Padding = '12,6'
+    $ribbon.Background = if ($isDelayed) { ConvertTo-UiBrush '#920703' } else { ConvertTo-UiBrush '#1A1E29' }
+    [System.Windows.Controls.DockPanel]::SetDock($ribbon, [System.Windows.Controls.Dock]::Top)
+
+    $ribbonDock = New-Object System.Windows.Controls.DockPanel
+    $lblRibbonLeft = New-Object System.Windows.Controls.TextBlock
+    $lblRibbonLeft.Text = if ($isDelayed) { "DELAYED CRITICAL: >15m" } else { "WAIT TIME" }
+    $lblRibbonLeft.Foreground = if ($isDelayed) { ConvertTo-UiBrush 'White' } else { ConvertTo-UiBrush '#8B949E' }
+    $lblRibbonLeft.FontWeight = 'Bold'
+    $lblRibbonLeft.FontSize = 10
+    $lblRibbonLeft.VerticalAlignment = 'Center'
+    $ribbonDock.Children.Add($lblRibbonLeft) | Out-Null
+
+    $lblRibbonRight = New-Object System.Windows.Controls.TextBlock
+    $lblRibbonRight.Text = $ageText
+    $lblRibbonRight.Foreground = if ($isDelayed) { ConvertTo-UiBrush 'White' } else { ConvertTo-UiBrush '#F0F0F0' }
+    $lblRibbonRight.FontWeight = 'Bold'
+    $lblRibbonRight.FontSize = 11
+    $lblRibbonRight.HorizontalAlignment = 'Right'
+    [System.Windows.Controls.DockPanel]::SetDock($lblRibbonRight, [System.Windows.Controls.Dock]::Right)
+    $ribbonDock.Children.Add($lblRibbonRight) | Out-Null
+
+    $ribbon.Child = $ribbonDock
+    $cardLayout.Children.Add($ribbon) | Out-Null
+
+    # 2. Action Buttons Footer (BOTTOM DOCK) - Exactly TWO Actions
+    $footerGrid = New-Object System.Windows.Controls.Grid
+    $footerGrid.Margin = '12,8,12,12'
+    [System.Windows.Controls.DockPanel]::SetDock($footerGrid, [System.Windows.Controls.Dock]::Bottom)
+    $footerGrid.ColumnDefinitions.Add((New-Object System.Windows.Controls.ColumnDefinition -Property @{ Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star) }))
+    $footerGrid.ColumnDefinitions.Add((New-Object System.Windows.Controls.ColumnDefinition -Property @{ Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star) }))
+
+    # Action 1: "Approve" (or Read-only status view if already approved)
+    $isApproved = ($order.approved -eq 1 -or $order.approved -eq $true -or $order.counter_status -in @('PREPARING', 'READY', 'COMPLETED'))
+    if (-not $isApproved) {
+      $btnApprove = New-Object System.Windows.Controls.Button
+      $btnApprove.Content = "Approve"
+      $btnApprove.Height = 38
+      $btnApprove.Margin = '0,0,4,0'
+      $btnApprove.Background = ConvertTo-UiBrush '#DC2626'
+      $btnApprove.Foreground = ConvertTo-UiBrush 'White'
+      $btnApprove.FontWeight = 'Bold'
+      $btnApprove.FontSize = 12
+      $btnApprove.BorderThickness = '0'
+
+      $targetOrder = $order
+      $btnApprove.Add_Click(({
+        try {
+          if ($targetOrder.client_order_id) {
+            $null = Bridge '/counter/orders/approve' 'POST' @{ client_order_id = $targetOrder.client_order_id }
+          }
+          Reload-Counter
+          $ui_status.Text = "Order #$($targetOrder.sequence_no) approved and queued for kitchen."
+        } catch {
+          $ui_status.Text = "Approval failed: $($_.Exception.Message)"
+        }
+      }.GetNewClosure()))
+      [System.Windows.Controls.Grid]::SetColumn($btnApprove, 0)
+      $footerGrid.Children.Add($btnApprove) | Out-Null
+    } else {
+      # Read-only status view
+      $statusBorder = New-Object System.Windows.Controls.Border
+      $statusBorder.Height = 38
+      $statusBorder.Margin = '0,0,4,0'
+      $statusBorder.CornerRadius = '4'
+      $statusBorder.Background = ConvertTo-UiBrush '#1A1E29'
+      $statusBorder.BorderBrush = ConvertTo-UiBrush '#222736'
+      $statusBorder.BorderThickness = '1'
+
+      $statusLabel = New-Object System.Windows.Controls.TextBlock
+      $statusLabel.Text = if ($order.counter_status -eq 'READY') { "Ready" } elseif ($order.counter_status -eq 'PREPARING') { "Cooking" } elseif ($order.counter_status -eq 'COMPLETED') { "Completed" } else { "In Kitchen" }
+      $statusLabel.Foreground = if ($order.counter_status -eq 'READY') { ConvertTo-UiBrush '#10B981' } elseif ($order.counter_status -eq 'PREPARING') { ConvertTo-UiBrush '#F59E0B' } else { ConvertTo-UiBrush '#3B82F6' }
+      $statusLabel.FontWeight = 'Bold'
+      $statusLabel.FontSize = 11
+      $statusLabel.HorizontalAlignment = 'Center'
+      $statusLabel.VerticalAlignment = 'Center'
+      $statusBorder.Child = $statusLabel
+
+      [System.Windows.Controls.Grid]::SetColumn($statusBorder, 0)
+      $footerGrid.Children.Add($statusBorder) | Out-Null
+    }
+
+    # Action 2: "Print Slip"
+    $btnPrint = New-Object System.Windows.Controls.Button
+    $btnPrint.Content = "Print Slip"
+    $btnPrint.Height = 38
+    $btnPrint.Margin = '4,0,0,0'
+    $btnPrint.Background = ConvertTo-UiBrush '#1A1E29'
+    $btnPrint.Foreground = ConvertTo-UiBrush '#F0F0F0'
+    $btnPrint.BorderBrush = ConvertTo-UiBrush '#222736'
+    $btnPrint.BorderThickness = '1'
+    $btnPrint.FontSize = 12
+
+    $printOrder = $order
+    $btnPrint.Add_Click(({
+      try {
+        $null = Bridge '/print' 'POST' @{
+          client_order_id = $printOrder.client_order_id
+          order_number = "#$($printOrder.sequence_no)"
+          order_type = $printOrder.order_type
+          table_number = $printOrder.table_number
+          total_amount = $printOrder.total_amount
+          items = $printOrder.items
+          print_type = 'KOT'
+        }
+        $ui_status.Text = "Printed ticket for order #$($printOrder.sequence_no)."
+      } catch {
+        $ui_status.Text = "Print error: $($_.Exception.Message)"
+      }
+    }.GetNewClosure()))
+
+    [System.Windows.Controls.Grid]::SetColumn($btnPrint, 1)
+    $footerGrid.Children.Add($btnPrint) | Out-Null
+    $cardLayout.Children.Add($footerGrid) | Out-Null
+
+    # 3. Card Body Content (STACKPANEL IN CENTER)
+    $bodyStack = New-Object System.Windows.Controls.StackPanel
+    $bodyStack.Margin = '12,10,12,0'
+
+    # Order Header DockPanel
+    $headerDock = New-Object System.Windows.Controls.DockPanel
+    $headerLeft = New-Object System.Windows.Controls.StackPanel
+    $txtOrderNo = New-Object System.Windows.Controls.TextBlock
+    $txtOrderNo.Text = "#ORD-$($order.sequence_no)"
+    $txtOrderNo.FontSize = 18
+    $txtOrderNo.FontWeight = 'Bold'
+    $txtOrderNo.Foreground = ConvertTo-UiBrush '#F0F0F0'
+    $headerLeft.Children.Add($txtOrderNo) | Out-Null
+
+    $serverInfo = if ($order.staff_name) { "Server: $($order.staff_name)" } else { "Online/QR Order" }
+    $txtServer = New-Object System.Windows.Controls.TextBlock
+    $txtServer.Text = $serverInfo
+    $txtServer.FontSize = 11
+    $txtServer.Foreground = ConvertTo-UiBrush '#8B949E'
+    $headerLeft.Children.Add($txtServer) | Out-Null
+    $headerDock.Children.Add($headerLeft) | Out-Null
+
+    # Right Type/Table badge + status pill
+    $headerRight = New-Object System.Windows.Controls.StackPanel
+    $headerRight.HorizontalAlignment = 'Right'
+    [System.Windows.Controls.DockPanel]::SetDock($headerRight, [System.Windows.Controls.Dock]::Right)
+
+    $badgeType = New-Object System.Windows.Controls.Border
+    $badgeType.Background = ConvertTo-UiBrush '#1A1E29'
+    $badgeType.CornerRadius = '4'
+    $badgeType.Padding = '6,2'
+    $badgeType.HorizontalAlignment = 'Right'
+    $txtBadge = New-Object System.Windows.Controls.TextBlock
+    $txtBadge.Text = if ($order.order_type -eq 'DINE_IN') { "Table $($order.table_number)" } elseif ($order.order_type -eq 'DELIVERY') { "Delivery" } else { "Pickup" }
+    $txtBadge.Foreground = ConvertTo-UiBrush '#F0F0F0'
+    $txtBadge.FontSize = 11
+    $txtBadge.FontWeight = 'Bold'
+    $badgeType.Child = $txtBadge
+    $headerRight.Children.Add($badgeType) | Out-Null
+
+    $badgeStatus = New-Object System.Windows.Controls.Border
+    $badgeStatus.CornerRadius = '4'
+    $badgeStatus.Padding = '6,2'
+    $badgeStatus.Margin = '0,4,0,0'
+    $badgeStatus.HorizontalAlignment = 'Right'
+    $badgeStatus.Background = if (-not $isApproved) { ConvertTo-UiBrush '#920703' } elseif ($order.counter_status -eq 'PREPARING') { ConvertTo-UiBrush '#2A1F11' } elseif ($order.counter_status -eq 'READY') { ConvertTo-UiBrush '#133526' } else { ConvertTo-UiBrush '#1A1E29' }
+    $txtStatus = New-Object System.Windows.Controls.TextBlock
+    $txtStatus.Text = if (-not $isApproved) { "AWAITING APPROVAL" } elseif ($order.counter_status -eq 'PREPARING') { "COOKING" } elseif ($order.counter_status -eq 'READY') { "READY" } else { "QUEUED" }
+    $txtStatus.Foreground = if (-not $isApproved) { ConvertTo-UiBrush '#F0F0F0' } elseif ($order.counter_status -eq 'PREPARING') { ConvertTo-UiBrush '#F59E0B' } elseif ($order.counter_status -eq 'READY') { ConvertTo-UiBrush '#10B981' } else { ConvertTo-UiBrush '#3B82F6' }
+    $txtStatus.FontSize = 10
+    $txtStatus.FontWeight = 'Bold'
+    $badgeStatus.Child = $txtStatus
+    $headerRight.Children.Add($badgeStatus) | Out-Null
+
+    $headerDock.Children.Add($headerRight) | Out-Null
+    $bodyStack.Children.Add($headerDock) | Out-Null
+
+    # Items Ledger
+    $ledgerBorder = New-Object System.Windows.Controls.Border
+    $ledgerBorder.Margin = '0,8,0,8'
+    $ledgerBorder.Padding = '0,6,0,6'
+    $ledgerBorder.BorderBrush = ConvertTo-UiBrush '#222736'
+    $ledgerBorder.BorderThickness = '0,1,0,1'
+
+    $itemsPanel = New-Object System.Windows.Controls.StackPanel
+    foreach ($item in $order.items) {
+      $itemDock = New-Object System.Windows.Controls.DockPanel
+      $itemDock.Margin = '0,3,0,3'
+
+      # Small Item Thumbnail Box (DESIGN_FINAL §2.1)
+      $thumbBorder = New-Object System.Windows.Controls.Border
+      $thumbBorder.Width = 32
+      $thumbBorder.Height = 32
+      $thumbBorder.CornerRadius = '4'
+      $thumbBorder.Background = ConvertTo-UiBrush '#0D0D0D'
+      $thumbBorder.BorderBrush = ConvertTo-UiBrush '#222736'
+      $thumbBorder.BorderThickness = '1'
+      $thumbBorder.Margin = '0,0,8,0'
+      
+      $thumbTxt = New-Object System.Windows.Controls.TextBlock
+      $thumbTxt.Text = "[-]"
+      $thumbTxt.FontSize = 11
+      $thumbTxt.HorizontalAlignment = 'Center'
+      $thumbTxt.VerticalAlignment = 'Center'
+      $thumbBorder.Child = $thumbTxt
+      $itemDock.Children.Add($thumbBorder) | Out-Null
+
+      $itemPrice = New-Object System.Windows.Controls.TextBlock
+      $lineTotal = if ($item.price_at_order) { [decimal]$item.price_at_order * [int]$item.quantity } else { [decimal]$item.price * [int]$item.quantity }
+      $itemPrice.Text = "Rs $lineTotal"
+      $itemPrice.Foreground = ConvertTo-UiBrush '#8B949E'
+      $itemPrice.FontSize = 11
+      $itemPrice.VerticalAlignment = 'Center'
+      [System.Windows.Controls.DockPanel]::SetDock($itemPrice, [System.Windows.Controls.Dock]::Right)
+      $itemDock.Children.Add($itemPrice) | Out-Null
+
+      $itemCenter = New-Object System.Windows.Controls.StackPanel
+      $itemName = New-Object System.Windows.Controls.TextBlock
+      $itemName.Text = "$($item.quantity)x $($item.name)"
+      $itemName.Foreground = ConvertTo-UiBrush '#F0F0F0'
+      $itemName.FontWeight = 'Bold'
+      $itemName.FontSize = 12
+      $itemCenter.Children.Add($itemName) | Out-Null
+
+      if ($item.notes) {
+        $itemNotes = New-Object System.Windows.Controls.TextBlock
+        $itemNotes.Text = [string]$item.notes
+        $itemNotes.Foreground = ConvertTo-UiBrush '#DC2626'
+        $itemNotes.FontSize = 10
+        $itemCenter.Children.Add($itemNotes) | Out-Null
+      }
+      $itemDock.Children.Add($itemCenter) | Out-Null
+
+      $itemsPanel.Children.Add($itemDock) | Out-Null
+    }
+    $ledgerBorder.Child = $itemsPanel
+    $bodyStack.Children.Add($ledgerBorder) | Out-Null
+
+    # Payment Summary
+    $payDock = New-Object System.Windows.Controls.DockPanel
+    $payBadge = New-Object System.Windows.Controls.TextBlock
+    $payText = if ($order.order_type -eq 'DINE_IN') {
+      if ($order.payment_status -eq 'PAID') { "Paid Dine-In" } else { "Unpaid Dine-In" }
+    } elseif ($order.order_type -eq 'DELIVERY') {
+      if ($order.payment_status -eq 'PAID') { "Paid Online" } else { "Cash on Delivery" }
+    } else {
+      if ($order.payment_status -eq 'PAID') { "Paid Pickup" } else { "Pay at Pickup" }
+    }
+    $payBadge.Text = $payText
+    $payBadge.Foreground = if ($order.payment_status -eq 'PAID') { ConvertTo-UiBrush '#10B981' } else { ConvertTo-UiBrush '#8B949E' }
+    $payBadge.FontSize = 11
+    $payBadge.VerticalAlignment = 'Center'
+    $payDock.Children.Add($payBadge) | Out-Null
+
+    $totalText = New-Object System.Windows.Controls.TextBlock
+    $totalText.Text = "TOTAL Rs $($order.total_amount)"
+    $totalText.Foreground = ConvertTo-UiBrush 'White'
+    $totalText.FontWeight = 'Bold'
+    $totalText.FontSize = 14
+    $totalText.HorizontalAlignment = 'Right'
+    [System.Windows.Controls.DockPanel]::SetDock($totalText, [System.Windows.Controls.Dock]::Right)
+    $payDock.Children.Add($totalText) | Out-Null
+
+    $bodyStack.Children.Add($payDock) | Out-Null
+    $cardLayout.Children.Add($bodyStack) | Out-Null
+
+    $ui_ordersWrapPanel.Children.Add($card) | Out-Null
+  }
+
+  # Update Footer ledger counts
+  if ($ui_lblDelayedCount) { $ui_lblDelayedCount.Text = "Delayed > 15m ($delayedCount)" }
+  if ($ui_lblCookingCount) { $ui_lblCookingCount.Text = "In Kitchen ($cookingCount)" }
+  if ($ui_lblReadyCount) { $ui_lblReadyCount.Text = "Ready for Service ($readyCount)" }
+
+  # Update Avg wait
+  if ($ui_ordersAvgWait) {
+    if ($activeCount -gt 0) {
+      $avgSec = [int]($totalWaitSec / $activeCount)
+      $avgMin = [int]($avgSec / 60)
+      $remSec = $avgSec % 60
+      $ui_ordersAvgWait.Text = "Avg Wait: ${avgMin}m ${remSec}s"
+    } else {
+      $ui_ordersAvgWait.Text = "Avg Wait: 0m 0s"
+    }
+  }
+}
+
+function Render-KitchenCards {
+  if (-not $ui_kitchenWrapPanel) { return }
+  $ui_kitchenWrapPanel.Children.Clear()
+
+  $allOrders = @($script:orders)
+  foreach ($ro in $script:remoteOrders) {
+    if (-not ($allOrders | Where-Object { $_.client_order_id -eq $ro.id -or $_.sequence_no -eq $ro.order_number })) {
+      $allOrders += [pscustomobject]@{
+        client_order_id = $ro.id
+        sequence_no = $ro.order_number
+        order_type = if ($ro.order_type) { $ro.order_type } else { 'DINE_IN' }
+        table_number = $ro.table_number
+        customer_name = $ro.customer_name
+        total_amount = $ro.total_amount
+        counter_status = if ($ro.status) { $ro.status } else { 'PENDING' }
+        created_at = $ro.created_at
+        items = $ro.items
+        approved = if ($ro.status -in @('PREPARING', 'READY', 'COMPLETED')) { 1 } else { 0 }
+      }
+    }
+  }
+
+  # Filter ONLY approved orders active in kitchen queue
+  $kitchenTickets = @($allOrders | Where-Object {
+    $isApproved = ($_.approved -eq 1 -or $_.approved -eq $true -or $_.counter_status -in @('PREPARING', 'READY'))
+    $isActive = ($_.counter_status -in @('PENDING', 'PREPARING', 'READY'))
+    $isApproved -and $isActive
+  })
+
+  $now = [DateTime]::UtcNow
+
+  foreach ($ticket in $kitchenTickets) {
+    # Kitchen filter tabs
+    if ($script:kitchenFilter -eq 'QUEUED' -and $ticket.counter_status -ne 'PENDING') { continue }
+    if ($script:kitchenFilter -eq 'COOKING' -and $ticket.counter_status -ne 'PREPARING') { continue }
+    if ($script:kitchenFilter -eq 'READY' -and $ticket.counter_status -ne 'READY') { continue }
+
+    # Calculate age
+    $orderTime = $now
+    if ($ticket.created_at) {
+      $parsedTime = [DateTime]::MinValue
+      if ([DateTime]::TryParse($ticket.created_at, [ref]$parsedTime)) {
+        $orderTime = $parsedTime.ToUniversalTime()
+      }
+    }
+    $age = $now - $orderTime
+    if ($age.TotalSeconds -lt 0) { $age = [TimeSpan]::Zero }
+    $totalMinutes = [int]$age.TotalMinutes
+    $remSeconds = [int]$age.Seconds
+    $ageText = "${totalMinutes}m ${remSeconds}s"
+    $isDelayed = ($totalMinutes -ge 15)
+    $isReady = ($ticket.counter_status -eq 'READY')
+
+    # Card border
+    $card = New-Object System.Windows.Controls.Border
+    $card.Width = 338
+    $card.Margin = '6'
+    $card.Background = ConvertTo-UiBrush '#161B22'
+    $card.BorderBrush = if ($isReady) { ConvertTo-UiBrush '#10B981' } elseif ($isDelayed) { ConvertTo-UiBrush '#920703' } else { ConvertTo-UiBrush '#222736' }
+    $card.BorderThickness = if ($isReady) { '2' } else { '1' }
+    $card.CornerRadius = '8'
+
+    $cardLayout = New-Object System.Windows.Controls.DockPanel
+    $card.Child = $cardLayout
+
+    # 1. Top Ribbon
+    $ribbon = New-Object System.Windows.Controls.Border
+    $ribbon.CornerRadius = '8,8,0,0'
+    $ribbon.Padding = '12,6'
+    $ribbon.Background = if ($isReady) { ConvertTo-UiBrush '#133526' } elseif ($isDelayed) { ConvertTo-UiBrush '#920703' } else { ConvertTo-UiBrush '#1A1E29' }
+    [System.Windows.Controls.DockPanel]::SetDock($ribbon, [System.Windows.Controls.Dock]::Top)
+
+    $ribbonDock = New-Object System.Windows.Controls.DockPanel
+    $lblRibbonLeft = New-Object System.Windows.Controls.TextBlock
+    $lblRibbonLeft.Text = if ($isReady) { "READY ON PASS" } elseif ($isDelayed) { "VIP CRITICAL WAIT: >15m" } else { "KITCHEN TIMER" }
+    $lblRibbonLeft.Foreground = if ($isReady) { ConvertTo-UiBrush '#10B981' } elseif ($isDelayed) { ConvertTo-UiBrush 'White' } else { ConvertTo-UiBrush '#8B949E' }
+    $lblRibbonLeft.FontWeight = 'Bold'
+    $lblRibbonLeft.FontSize = 10
+    $lblRibbonLeft.VerticalAlignment = 'Center'
+    $ribbonDock.Children.Add($lblRibbonLeft) | Out-Null
+
+    $lblRibbonRight = New-Object System.Windows.Controls.TextBlock
+    $lblRibbonRight.Text = $ageText
+    $lblRibbonRight.Foreground = if ($isReady) { ConvertTo-UiBrush '#10B981' } elseif ($isDelayed) { ConvertTo-UiBrush 'White' } else { ConvertTo-UiBrush '#F0F0F0' }
+    $lblRibbonRight.FontWeight = 'Bold'
+    $lblRibbonRight.FontSize = 11
+    $lblRibbonRight.HorizontalAlignment = 'Right'
+    [System.Windows.Controls.DockPanel]::SetDock($lblRibbonRight, [System.Windows.Controls.Dock]::Right)
+    $ribbonDock.Children.Add($lblRibbonRight) | Out-Null
+
+    $ribbon.Child = $ribbonDock
+    $cardLayout.Children.Add($ribbon) | Out-Null
+
+    # 2. Action Buttons Footer (BOTTOM DOCK) - Exactly TWO Actions in Sequence
+    $footerGrid = New-Object System.Windows.Controls.Grid
+    $footerGrid.Margin = '12,8,12,12'
+    [System.Windows.Controls.DockPanel]::SetDock($footerGrid, [System.Windows.Controls.Dock]::Bottom)
+    $footerGrid.ColumnDefinitions.Add((New-Object System.Windows.Controls.ColumnDefinition -Property @{ Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star) }))
+    $footerGrid.ColumnDefinitions.Add((New-Object System.Windows.Controls.ColumnDefinition -Property @{ Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star) }))
+
+    $tkt = $ticket
+
+    # Button 1: "Start Cooking"
+    if ($ticket.counter_status -eq 'PENDING') {
+      $btnStartCook = New-Object System.Windows.Controls.Button
+      $btnStartCook.Content = "Start Cooking"
+      $btnStartCook.Height = 40
+      $btnStartCook.Margin = '0,0,4,0'
+      $btnStartCook.Background = ConvertTo-UiBrush '#DC2626'
+      $btnStartCook.Foreground = ConvertTo-UiBrush 'White'
+      $btnStartCook.FontWeight = 'Bold'
+      $btnStartCook.FontSize = 12
+      $btnStartCook.BorderThickness = '0'
+
+      $btnStartCook.Add_Click(({
+        try {
+          if ($tkt.client_order_id) {
+            $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $tkt.client_order_id; counter_status = 'PREPARING' }
+          }
+          Reload-Counter
+          $ui_status.Text = "Order #$($tkt.sequence_no) is now cooking (PREPARING)."
+        } catch {
+          $ui_status.Text = "Status update failed: $($_.Exception.Message)"
+        }
+      }.GetNewClosure()))
+      [System.Windows.Controls.Grid]::SetColumn($btnStartCook, 0)
+      $footerGrid.Children.Add($btnStartCook) | Out-Null
+    } else {
+      $lblCookState = New-Object System.Windows.Controls.Border
+      $lblCookState.Height = 40
+      $lblCookState.Margin = '0,0,4,0'
+      $lblCookState.CornerRadius = '4'
+      $lblCookState.Background = ConvertTo-UiBrush '#1A1E29'
+      $lblCookState.BorderBrush = ConvertTo-UiBrush '#222736'
+      $lblCookState.BorderThickness = '1'
+
+      $txtCook = New-Object System.Windows.Controls.TextBlock
+      $txtCook.Text = if ($ticket.counter_status -eq 'READY') { "Cooked [OK]" } else { "Cooking..." }
+      $txtCook.Foreground = if ($ticket.counter_status -eq 'READY') { ConvertTo-UiBrush '#10B981' } else { ConvertTo-UiBrush '#F59E0B' }
+      $txtCook.FontWeight = 'Bold'
+      $txtCook.FontSize = 11
+      $txtCook.HorizontalAlignment = 'Center'
+      $txtCook.VerticalAlignment = 'Center'
+      $lblCookState.Child = $txtCook
+      [System.Windows.Controls.Grid]::SetColumn($lblCookState, 0)
+      $footerGrid.Children.Add($lblCookState) | Out-Null
+    }
+
+    # Button 2: "Order Ready"
+    if ($ticket.counter_status -eq 'PREPARING') {
+      $btnReady = New-Object System.Windows.Controls.Button
+      $btnReady.Content = "Order Ready"
+      $btnReady.Height = 40
+      $btnReady.Margin = '4,0,0,0'
+      $btnReady.Background = ConvertTo-UiBrush '#10B981'
+      $btnReady.Foreground = ConvertTo-UiBrush 'White'
+      $btnReady.FontWeight = 'Bold'
+      $btnReady.FontSize = 12
+      $btnReady.BorderThickness = '0'
+
+      $btnReady.Add_Click(({
+        try {
+          if ($tkt.client_order_id) {
+            $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $tkt.client_order_id; counter_status = 'READY' }
+          }
+          Reload-Counter
+          $ui_status.Text = "Order #$($tkt.sequence_no) marked READY on pass."
+        } catch {
+          $ui_status.Text = "Status update failed: $($_.Exception.Message)"
+        }
+      }.GetNewClosure()))
+      [System.Windows.Controls.Grid]::SetColumn($btnReady, 1)
+      $footerGrid.Children.Add($btnReady) | Out-Null
+    } elseif ($ticket.counter_status -eq 'READY') {
+      $lblReadyState = New-Object System.Windows.Controls.Border
+      $lblReadyState.Height = 40
+      $lblReadyState.Margin = '4,0,0,0'
+      $lblReadyState.CornerRadius = '4'
+      $lblReadyState.Background = ConvertTo-UiBrush '#133526'
+      $lblReadyState.BorderBrush = ConvertTo-UiBrush '#10B981'
+      $lblReadyState.BorderThickness = '1'
+
+      $txtReady = New-Object System.Windows.Controls.TextBlock
+      $txtReady.Text = "Order Ready"
+      $txtReady.Foreground = ConvertTo-UiBrush '#10B981'
+      $txtReady.FontWeight = 'Bold'
+      $txtReady.FontSize = 12
+      $txtReady.HorizontalAlignment = 'Center'
+      $txtReady.VerticalAlignment = 'Center'
+      $lblReadyState.Child = $txtReady
+      [System.Windows.Controls.Grid]::SetColumn($lblReadyState, 1)
+      $footerGrid.Children.Add($lblReadyState) | Out-Null
+    } else {
+      # PENDING
+      $lblPendingState = New-Object System.Windows.Controls.Border
+      $lblPendingState.Height = 40
+      $lblPendingState.Margin = '4,0,0,0'
+      $lblPendingState.CornerRadius = '4'
+      $lblPendingState.Background = ConvertTo-UiBrush '#1A1E29'
+      $lblPendingState.BorderBrush = ConvertTo-UiBrush '#222736'
+      $lblPendingState.BorderThickness = '1'
+
+      $txtPending = New-Object System.Windows.Controls.TextBlock
+      $txtPending.Text = "Pending Cook"
+      $txtPending.Foreground = ConvertTo-UiBrush '#8B949E'
+      $txtPending.FontSize = 11
+      $txtPending.HorizontalAlignment = 'Center'
+      $txtPending.VerticalAlignment = 'Center'
+      $lblPendingState.Child = $txtPending
+      [System.Windows.Controls.Grid]::SetColumn($lblPendingState, 1)
+      $footerGrid.Children.Add($lblPendingState) | Out-Null
+    }
+
+    $cardLayout.Children.Add($footerGrid) | Out-Null
+
+    # 3. Ticket Body (Items Ledger)
+    $bodyStack = New-Object System.Windows.Controls.StackPanel
+    $bodyStack.Margin = '12,10,12,0'
+
+    $headerDock = New-Object System.Windows.Controls.DockPanel
+    $headerLeft = New-Object System.Windows.Controls.StackPanel
+    $txtTktNo = New-Object System.Windows.Controls.TextBlock
+    $txtTktNo.Text = "TK-#$($ticket.sequence_no)"
+    $txtTktNo.FontSize = 18
+    $txtTktNo.FontWeight = 'Bold'
+    $txtTktNo.Foreground = ConvertTo-UiBrush '#F0F0F0'
+    $headerLeft.Children.Add($txtTktNo) | Out-Null
+
+    $subInfo = if ($ticket.order_type -eq 'DINE_IN') { "Table $($ticket.table_number)" } elseif ($ticket.order_type -eq 'DELIVERY') { "Delivery" } else { "Pickup" }
+    $txtSub = New-Object System.Windows.Controls.TextBlock
+    $txtSub.Text = $subInfo
+    $txtSub.FontSize = 12
+    $txtSub.FontWeight = 'Bold'
+    $txtSub.Foreground = ConvertTo-UiBrush '#DC2626'
+    $headerLeft.Children.Add($txtSub) | Out-Null
+    $headerDock.Children.Add($headerLeft) | Out-Null
+
+    $badgeStatus = New-Object System.Windows.Controls.Border
+    $badgeStatus.CornerRadius = '4'
+    $badgeStatus.Padding = '8,4'
+    $badgeStatus.HorizontalAlignment = 'Right'
+    [System.Windows.Controls.DockPanel]::SetDock($badgeStatus, [System.Windows.Controls.Dock]::Right)
+    $badgeStatus.Background = if ($ticket.counter_status -eq 'READY') { ConvertTo-UiBrush '#133526' } elseif ($ticket.counter_status -eq 'PREPARING') { ConvertTo-UiBrush '#2A1F11' } else { ConvertTo-UiBrush '#1A1E29' }
+    
+    $txtStatus = New-Object System.Windows.Controls.TextBlock
+    $txtStatus.Text = if ($ticket.counter_status -eq 'READY') { "READY" } elseif ($ticket.counter_status -eq 'PREPARING') { "COOKING" } else { "QUEUED" }
+    $txtStatus.Foreground = if ($ticket.counter_status -eq 'READY') { ConvertTo-UiBrush '#10B981' } elseif ($ticket.counter_status -eq 'PREPARING') { ConvertTo-UiBrush '#F59E0B' } else { ConvertTo-UiBrush '#3B82F6' }
+    $txtStatus.FontSize = 11
+    $txtStatus.FontWeight = 'Bold'
+    $badgeStatus.Child = $txtStatus
+    $headerDock.Children.Add($badgeStatus) | Out-Null
+
+    $bodyStack.Children.Add($headerDock) | Out-Null
+
+    # Ledger items
+    $ledgerBorder = New-Object System.Windows.Controls.Border
+    $ledgerBorder.Margin = '0,10,0,8'
+    $ledgerBorder.Padding = '0,6,0,6'
+    $ledgerBorder.BorderBrush = ConvertTo-UiBrush '#222736'
+    $ledgerBorder.BorderThickness = '0,1,0,0'
+
+    $itemsPanel = New-Object System.Windows.Controls.StackPanel
+    foreach ($item in $ticket.items) {
+      $itemDock = New-Object System.Windows.Controls.DockPanel
+      $itemDock.Margin = '0,4,0,4'
+
+      $itemCenter = New-Object System.Windows.Controls.StackPanel
+      $itemName = New-Object System.Windows.Controls.TextBlock
+      $itemName.Text = "$($item.quantity)x $($item.name)"
+      $itemName.Foreground = ConvertTo-UiBrush '#F0F0F0'
+      $itemName.FontWeight = 'Bold'
+      $itemName.FontSize = 14
+      $itemCenter.Children.Add($itemName) | Out-Null
+
+      if ($item.notes) {
+        $itemNotes = New-Object System.Windows.Controls.TextBlock
+        $itemNotes.Text = [string]$item.notes
+        $itemNotes.Foreground = ConvertTo-UiBrush '#DC2626'
+        $itemNotes.FontSize = 11
+        $itemNotes.FontWeight = 'SemiBold'
+        $itemCenter.Children.Add($itemNotes) | Out-Null
+      }
+      $itemDock.Children.Add($itemCenter) | Out-Null
+      $itemsPanel.Children.Add($itemDock) | Out-Null
+    }
+    $ledgerBorder.Child = $itemsPanel
+    $bodyStack.Children.Add($ledgerBorder) | Out-Null
+    $cardLayout.Children.Add($bodyStack) | Out-Null
+
+    $ui_kitchenWrapPanel.Children.Add($card) | Out-Null
+  }
+}
+
 function Reload-Counter {
   try {
     $state = Bridge "/counter/state?role=$script:activeRole"
     $script:items = @($state.items); $script:orders = @($state.orders); $script:remoteOrders = @($state.remote_orders)
     if ($ui_sidebarTenant) { $ui_sidebarTenant.Text = [string]$state.tenant_slug.ToUpper() }
 
-    # Detect newly incoming orders and play chime alert
+    # Detect newly incoming orders and show toast alert + single chime
     $newOrdersFound = 0
+    $latestNewOrder = $null
     foreach ($order in $script:orders) {
       $orderKey = "L-$($order.sequence_no)"
       if (-not $script:seenOrderKeys.Contains($orderKey)) {
         $script:seenOrderKeys.Add($orderKey) | Out-Null
-        if ($script:hasInitializedOrders) { $newOrdersFound++ }
+        if ($script:hasInitializedOrders) {
+          $newOrdersFound++
+          $latestNewOrder = $order
+        }
       }
     }
     foreach ($order in $script:remoteOrders) {
       $orderKey = "R-$($order.id)"
       if (-not $script:seenOrderKeys.Contains($orderKey)) {
         $script:seenOrderKeys.Add($orderKey) | Out-Null
-        if ($script:hasInitializedOrders) { $newOrdersFound++ }
+        if ($script:hasInitializedOrders) {
+          $newOrdersFound++
+          if (-not $latestNewOrder) { $latestNewOrder = $order }
+        }
       }
     }
-    if ($newOrdersFound -gt 0) {
-      try { [System.Media.SystemSounds]::Asterisk.Play() } catch { }
-      $ui_status.Text = "[ALERT] $newOrdersFound new incoming order(s) received."
+    if ($newOrdersFound -gt 0 -and $latestNewOrder) {
+      Show-OrderToast $latestNewOrder
+      $ui_status.Text = "New incoming order received."
     }
     $script:hasInitializedOrders = $true
 
-    $ui_menuList.Items.Clear()
-    foreach ($item in $script:items) {
-      $entry = New-Object System.Windows.Controls.ListBoxItem
-      $entry.Content = "$($item.name)   -   Rs $([decimal]$item.price)   -   $($item.category_name)"
-      $entry.Tag = $item; $entry.Padding = '14'; $entry.Margin = '4'; $entry.Background = '#161922'
-      if (-not $item.in_stock) { $entry.IsEnabled = $false; $entry.Content += '   -   [SOLD OUT]' }
-      $ui_menuList.Items.Add($entry) | Out-Null
-    }
-
-    $ui_ordersList.Items.Clear(); $ui_kitchenList.Items.Clear()
-    foreach ($order in $script:orders) {
-      $itemsText = ($order.items | ForEach-Object { "$($_.name) × $($_.quantity)" }) -join ', '
-      $typeBadge = "[$($order.order_type)]"
-      
-      $refInfo = if ($order.order_type -eq 'DINE_IN') {
-        "Table $($order.table_number)"
-      } elseif ($order.order_type -eq 'DELIVERY') {
-        "Delivery to: $($order.customer_name) ($($order.customer_phone)) - $($order.customer_address)"
-      } else {
-        "Pickup: $($order.customer_name) ($($order.customer_phone))"
-      }
-
-      $riderInfo = if ($order.rider_name) { " - Rider: $($order.rider_name)" } else { "" }
-      $line = "#$($order.sequence_no) $typeBadge - $refInfo - Rs $($order.total_amount) - $($order.counter_status) - $($order.payment_status)$riderInfo - $itemsText"
-      
-      $entry = New-Object System.Windows.Controls.ListBoxItem; $entry.Content = $line; $entry.Tag = $order; $entry.Padding = '12'; $entry.Margin = '3'; $entry.Background = '#161922'
-      $ui_ordersList.Items.Add($entry) | Out-Null
-
-      if ($order.counter_status -ne 'COMPLETED' -and $order.counter_status -ne 'CANCELLED') {
-        $ticket = New-Object System.Windows.Controls.ListBoxItem; $ticket.Content = $line; $ticket.Tag = $order; $ticket.Padding = '14'; $ticket.Margin = '5'
-        $ticket.Background = if ($order.counter_status -eq 'READY') { '#133526' } elseif ($order.counter_status -eq 'PREPARING') { '#2A1F11' } else { '#161922' }
-        $ui_kitchenList.Items.Add($ticket) | Out-Null
+    if ($ui_menuList) {
+      $ui_menuList.Items.Clear()
+      foreach ($item in $script:items) {
+        $entry = New-Object System.Windows.Controls.ListBoxItem
+        $entry.Content = "$($item.name)   -   Rs $([decimal]$item.price)   -   $($item.category_name)"
+        $entry.Tag = $item; $entry.Padding = '12'; $entry.Margin = '3'; $entry.Background = '#161922'
+        if (-not $item.in_stock) { $entry.IsEnabled = $false; $entry.Content += '   -   [SOLD OUT]' }
+        $ui_menuList.Items.Add($entry) | Out-Null
       }
     }
 
-    foreach ($order in $script:remoteOrders) {
-      if ($script:orders.cloud_order_id -contains $order.id) { continue }
-      $itemsText = ($order.items | ForEach-Object { "$($_.name) × $($_.quantity)" }) -join ', '
-      $entry = New-Object System.Windows.Controls.ListBoxItem; $entry.Content = "WEB - #$($order.order_number) - [$($order.order_type)] - $($order.status) - $itemsText"; $entry.Tag = $order; $entry.Padding = '12'; $entry.Margin = '3'; $entry.Background = '#31191D'
-      $ui_ordersList.Items.Add($entry) | Out-Null
-      if ($order.status -ne 'COMPLETED' -and $order.status -ne 'CANCELLED') {
-        $ui_kitchenList.Items.Add($entry) | Out-Null
-      }
-    }
-    $ui_connection.Text = "LOCAL - $($state.pending_orders) queued"
+    Render-OrdersCards
+    Render-KitchenCards
+
+    $ui_connection.Text = "KDS SYNCED"
     $ui_status.Text = "Local SQLite ready - $($state.items.Count) menu items - $($state.orders.Count) orders"
     Reload-Reports
     Reload-RiderDeliveries
@@ -1510,50 +2293,98 @@ $ui_placeOrder.Add_Click({
   }
 })
 
-# Context action on selected order in Cashier POS
-$ui_ordersList.Add_SelectionChanged({
-  if ($ui_ordersList.SelectedItem) {
+# Filter Tabs & Search wiring
+if ($ui_btnFilterAll) { $ui_btnFilterAll.Add_Click({ Set-OrdersFilterUI 'ALL' }) }
+if ($ui_btnFilterDineIn) { $ui_btnFilterDineIn.Add_Click({ Set-OrdersFilterUI 'DINE_IN' }) }
+if ($ui_btnFilterDelivery) { $ui_btnFilterDelivery.Add_Click({ Set-OrdersFilterUI 'DELIVERY' }) }
+if ($ui_btnFilterUrgent) { $ui_btnFilterUrgent.Add_Click({ Set-OrdersFilterUI 'URGENT' }) }
+
+if ($ui_btnKitchenFilterAll) { $ui_btnKitchenFilterAll.Add_Click({ Set-KitchenFilterUI 'ALL' }) }
+if ($ui_btnKitchenFilterQueued) { $ui_btnKitchenFilterQueued.Add_Click({ Set-KitchenFilterUI 'QUEUED' }) }
+if ($ui_btnKitchenFilterCooking) { $ui_btnKitchenFilterCooking.Add_Click({ Set-KitchenFilterUI 'COOKING' }) }
+if ($ui_btnKitchenFilterReady) { $ui_btnKitchenFilterReady.Add_Click({ Set-KitchenFilterUI 'READY' }) }
+
+if ($ui_ordersSearchBox) {
+  $ui_ordersSearchBox.Add_TextChanged({
+    $script:ordersSearchQuery = $ui_ordersSearchBox.Text.Trim()
+    Render-OrdersCards
+  })
+}
+
+if ($ui_btnTogglePosComposer) {
+  $ui_btnTogglePosComposer.Add_Click({
+    if ($ui_posComposerBorder) {
+      $ui_posComposerBorder.Visibility = if ($ui_posComposerBorder.Visibility -eq 'Visible') { 'Collapsed' } else { 'Visible' }
+    }
+  })
+}
+
+if ($ui_btnClosePosComposer) {
+  $ui_btnClosePosComposer.Add_Click({
+    if ($ui_posComposerBorder) { $ui_posComposerBorder.Visibility = 'Collapsed' }
+  })
+}
+
+if ($ui_btnDismissToast) {
+  $ui_btnDismissToast.Add_Click({
+    if ($script:toastTimer) { $script:toastTimer.Stop() }
+    if ($ui_orderToast) { $ui_orderToast.Visibility = 'Collapsed' }
+  })
+}
+
+if ($ui_btnSyncAllTickets) {
+  $ui_btnSyncAllTickets.Add_Click({
+    Reload-Counter
+    $ui_status.Text = "All tickets synchronized."
+  })
+}
+
+# Context action on selected order in Cashier POS (if ListBox present)
+if ($ui_ordersList) {
+  $ui_ordersList.Add_SelectionChanged({
+    if ($ui_ordersList.SelectedItem -and $ui_btnContextAction) {
+      $order = $ui_ordersList.SelectedItem.Tag
+      if ($order.order_type -eq 'DELIVERY') {
+        $ui_btnContextAction.Content = if ($order.rider_name) { "Change Rider ($($order.rider_name))" } else { "Assign Rider" }
+        $ui_btnContextAction.Background = ConvertTo-UiBrush '#DC2626'
+      } elseif ($order.order_type -eq 'PICKUP') {
+        $ui_btnContextAction.Content = if ($order.counter_status -eq 'READY') { "Mark Picked Up" } else { "Mark Ready for Pickup" }
+        $ui_btnContextAction.Background = ConvertTo-UiBrush '#10B981'
+      } else {
+        $ui_btnContextAction.Content = "Serve to Table / Done"
+        $ui_btnContextAction.Background = ConvertTo-UiBrush '#DC2626'
+      }
+    }
+  })
+}
+
+if ($ui_btnContextAction) {
+  $ui_btnContextAction.Add_Click({
+    if (-not $ui_ordersList.SelectedItem) { $ui_status.Text = 'Select an order from the list first.'; return }
     $order = $ui_ordersList.SelectedItem.Tag
+    if (-not $order.client_order_id) { $ui_status.Text = 'Web orders must be completed through web dashboard.'; return }
+
     if ($order.order_type -eq 'DELIVERY') {
-      $ui_btnContextAction.Content = if ($order.rider_name) { "Change Rider ($($order.rider_name))" } else { "Assign Rider" }
-      $ui_btnContextAction.Background = ConvertTo-UiBrush '#DC2626'
+      if (Show-AssignRiderDialog $order) {
+        Reload-Counter
+        $ui_status.Text = "Assigned rider to order #$($order.sequence_no)."
+      }
     } elseif ($order.order_type -eq 'PICKUP') {
-      $ui_btnContextAction.Content = if ($order.counter_status -eq 'READY') { "Mark Picked Up" } else { "Mark Ready for Pickup" }
-      $ui_btnContextAction.Background = ConvertTo-UiBrush '#10B981'
+      $nextStatus = if ($order.counter_status -eq 'READY') { 'COMPLETED' } else { 'READY' }
+      try {
+        $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = $nextStatus }
+        Reload-Counter
+        $ui_status.Text = "Pickup order #$($order.sequence_no) updated to $nextStatus."
+      } catch { $ui_status.Text = $_.Exception.Message }
     } else {
-      # Dine In
-      $ui_btnContextAction.Content = "Serve to Table / Done"
-      $ui_btnContextAction.Background = ConvertTo-UiBrush '#DC2626'
+      try {
+        $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'COMPLETED' }
+        Reload-Counter
+        $ui_status.Text = "Dine-in order #$($order.sequence_no) marked completed."
+      } catch { $ui_status.Text = $_.Exception.Message }
     }
-  }
-})
-
-$ui_btnContextAction.Add_Click({
-  if (-not $ui_ordersList.SelectedItem) { $ui_status.Text = 'Select an order from the list first.'; return }
-  $order = $ui_ordersList.SelectedItem.Tag
-  if (-not $order.client_order_id) { $ui_status.Text = 'Web orders must be completed through web dashboard.'; return }
-
-  if ($order.order_type -eq 'DELIVERY') {
-    if (Show-AssignRiderDialog $order) {
-      Reload-Counter
-      $ui_status.Text = "Assigned rider to order #$($order.sequence_no)."
-    }
-  } elseif ($order.order_type -eq 'PICKUP') {
-    $nextStatus = if ($order.counter_status -eq 'READY') { 'COMPLETED' } else { 'READY' }
-    try {
-      $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = $nextStatus }
-      Reload-Counter
-      $ui_status.Text = "Pickup order #$($order.sequence_no) updated to $nextStatus."
-    } catch { $ui_status.Text = $_.Exception.Message }
-  } else {
-    # Dine In
-    try {
-      $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'COMPLETED' }
-      Reload-Counter
-      $ui_status.Text = "Dine-in order #$($order.sequence_no) marked completed."
-    } catch { $ui_status.Text = $_.Exception.Message }
-  }
-})
+  })
+}
 
 $ui_refresh.Add_Click({
   try {
@@ -1783,117 +2614,127 @@ $ui_deactivateStaff.Add_Click({
 })
 
 # Kitchen & Order Actions
-$ui_printTicket.Add_Click({
-  if ($ui_kitchenList.SelectedItem) {
-    try {
+if ($ui_printTicket) {
+  $ui_printTicket.Add_Click({
+    if ($ui_kitchenList -and $ui_kitchenList.SelectedItem) {
+      try {
+        $order = $ui_kitchenList.SelectedItem.Tag
+        $orderNumber = if($order.sequence_no){"#$($order.sequence_no)"}else{"#$($order.order_number)"}
+        $null = Bridge '/print' 'POST' @{
+          client_order_id=$order.client_order_id
+          order_number=$orderNumber
+          order_type=$order.order_type
+          table_number=$order.table_number
+          total_amount=$order.total_amount
+          items=$order.items
+          print_type='KOT'
+        }
+        $ui_status.Text = 'Kitchen ticket sent to the local printer.'
+      } catch {
+        $ui_status.Text = "Ticket remains in local queue; printer unavailable: $($_.Exception.Message)"
+      }
+    }
+  })
+}
+
+if ($ui_paid) {
+  $ui_paid.Add_Click({
+    if ($ui_ordersList -and $ui_ordersList.SelectedItem) {
+      $order = $ui_ordersList.SelectedItem.Tag
+      if (-not $order.client_order_id) {
+        $ui_status.Text = 'Online guest-order billing is handled via online gateway.'
+        return
+      }
+      try {
+        $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; payment_status = 'PAID' }
+        Reload-Counter
+      } catch {
+        $ui_status.Text = $_.Exception.Message
+      }
+    }
+  })
+}
+
+if ($ui_preparing) {
+  $ui_preparing.Add_Click({
+    if ($ui_kitchenList -and $ui_kitchenList.SelectedItem) {
       $order = $ui_kitchenList.SelectedItem.Tag
-      $orderNumber = if($order.sequence_no){"#$($order.sequence_no)"}else{"#$($order.order_number)"}
-      $null = Bridge '/print' 'POST' @{
-        client_order_id=$order.client_order_id
-        order_number=$orderNumber
-        order_type=$order.order_type
-        table_number=$order.table_number
-        total_amount=$order.total_amount
-        items=$order.items
-        print_type='KOT'
+      try {
+        if ($order.client_order_id) {
+          $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'PREPARING' }
+        } else {
+          $access = Bridge '/counter/staff-access?role=kitchen'
+          $ticketUri = $script:webAppUrl + '/api/staff/kitchen-tickets'
+          $bearerToken = "Bearer " + $access.access_token
+          $hdrs = @{ Authorization = $bearerToken }
+          $body = @{ order_id = $order.order_id; status = 'PREPARING' } | ConvertTo-Json -Compress
+          $null = Invoke-RestMethod -Method Patch -Uri $ticketUri -TimeoutSec 5 -Headers $hdrs -ContentType 'application/json' -Body $body
+        }
+        Reload-Counter
+        $ui_status.Text = "Order #$($order.sequence_no) is now cooking (PREPARING)."
+      } catch {
+        $ui_status.Text = $_.Exception.Message
       }
-      $ui_status.Text = 'Kitchen ticket sent to the local printer.'
-    } catch {
-      $ui_status.Text = "Ticket remains in local queue; printer unavailable: $($_.Exception.Message)"
     }
-  }
-})
+  })
+}
 
-$ui_paid.Add_Click({
-  if ($ui_ordersList.SelectedItem) {
-    $order = $ui_ordersList.SelectedItem.Tag
-    if (-not $order.client_order_id) {
-      $ui_status.Text = 'Online guest-order billing is handled via online gateway.'
-      return
-    }
-    try {
-      $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; payment_status = 'PAID' }
-      Reload-Counter
-    } catch {
-      $ui_status.Text = $_.Exception.Message
-    }
-  }
-})
-
-$ui_preparing.Add_Click({
-  if ($ui_kitchenList.SelectedItem) {
-    $order = $ui_kitchenList.SelectedItem.Tag
-    try {
-      if ($order.client_order_id) {
-        $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'PREPARING' }
-      } else {
-        $access = Bridge '/counter/staff-access?role=kitchen'
-        $ticketUri = $script:webAppUrl + '/api/staff/kitchen-tickets'
-        $bearerToken = "Bearer " + $access.access_token
-        $hdrs = @{ Authorization = $bearerToken }
-        $body = @{ order_id = $order.order_id; status = 'PREPARING' } | ConvertTo-Json -Compress
-        $null = Invoke-RestMethod -Method Patch -Uri $ticketUri -TimeoutSec 5 -Headers $hdrs -ContentType 'application/json' -Body $body
+if ($ui_ready) {
+  $ui_ready.Add_Click({
+    if ($ui_kitchenList -and $ui_kitchenList.SelectedItem) {
+      $order = $ui_kitchenList.SelectedItem.Tag
+      try {
+        $ui_ready.IsEnabled = $false
+        $ui_ready.Content = "Ready [OK]"
+        $ui_ready.Background = ConvertTo-UiBrush '#10B981'
+        
+        if ($order.client_order_id) {
+          $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'READY' }
+        } else {
+          $access = Bridge '/counter/staff-access?role=kitchen'
+          $ticketUri = $script:webAppUrl + '/api/staff/kitchen-tickets'
+          $bearerToken = "Bearer " + $access.access_token
+          $hdrs = @{ Authorization = $bearerToken }
+          $body = @{ order_id = $order.order_id; status = 'READY' } | ConvertTo-Json -Compress
+          $null = Invoke-RestMethod -Method Patch -Uri $ticketUri -TimeoutSec 5 -Headers $hdrs -ContentType 'application/json' -Body $body
+        }
+        Reload-Counter
+        $ui_status.Text = "Order #$($order.sequence_no) marked READY."
+      } catch {
+        $ui_status.Text = $_.Exception.Message
+      } finally {
+        Start-Sleep -Milliseconds 400
+        $ui_ready.IsEnabled = $true
+        $ui_ready.Content = "Mark Ready"
+        $ui_ready.Background = ConvertTo-UiBrush '#1A1E29'
       }
-      Reload-Counter
-      $ui_status.Text = "Order #$($order.sequence_no) is now cooking (PREPARING)."
-    } catch {
-      $ui_status.Text = $_.Exception.Message
     }
-  }
-})
+  })
+}
 
-$ui_ready.Add_Click({
-  if ($ui_kitchenList.SelectedItem) {
-    $order = $ui_kitchenList.SelectedItem.Tag
-    try {
-      $ui_ready.IsEnabled = $false
-      $ui_ready.Content = "Ready [OK]"
-      $ui_ready.Background = ConvertTo-UiBrush '#10B981'
-      
-      if ($order.client_order_id) {
-        $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'READY' }
-      } else {
-        $access = Bridge '/counter/staff-access?role=kitchen'
-        $ticketUri = $script:webAppUrl + '/api/staff/kitchen-tickets'
-        $bearerToken = "Bearer " + $access.access_token
-        $hdrs = @{ Authorization = $bearerToken }
-        $body = @{ order_id = $order.order_id; status = 'READY' } | ConvertTo-Json -Compress
-        $null = Invoke-RestMethod -Method Patch -Uri $ticketUri -TimeoutSec 5 -Headers $hdrs -ContentType 'application/json' -Body $body
+if ($ui_btnKitchenComplete) {
+  $ui_btnKitchenComplete.Add_Click({
+    if ($ui_kitchenList -and $ui_kitchenList.SelectedItem) {
+      $order = $ui_kitchenList.SelectedItem.Tag
+      try {
+        if ($order.client_order_id) {
+          $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'COMPLETED' }
+        } else {
+          $access = Bridge '/counter/staff-access?role=kitchen'
+          $ticketUri = $script:webAppUrl + '/api/staff/kitchen-tickets'
+          $bearerToken = "Bearer " + $access.access_token
+          $hdrs = @{ Authorization = $bearerToken }
+          $body = @{ order_id = $order.order_id; status = 'COMPLETED' } | ConvertTo-Json -Compress
+          $null = Invoke-RestMethod -Method Patch -Uri $ticketUri -TimeoutSec 5 -Headers $hdrs -ContentType 'application/json' -Body $body
+        }
+        Reload-Counter
+        $ui_status.Text = "Order #$($order.sequence_no) completed."
+      } catch {
+        $ui_status.Text = $_.Exception.Message
       }
-      Reload-Counter
-      $ui_status.Text = "Order #$($order.sequence_no) marked READY."
-    } catch {
-      $ui_status.Text = $_.Exception.Message
-    } finally {
-      Start-Sleep -Milliseconds 400
-      $ui_ready.IsEnabled = $true
-      $ui_ready.Content = "Mark Ready"
-      $ui_ready.Background = ConvertTo-UiBrush '#1A1E29'
     }
-  }
-})
-
-$ui_btnKitchenComplete.Add_Click({
-  if ($ui_kitchenList.SelectedItem) {
-    $order = $ui_kitchenList.SelectedItem.Tag
-    try {
-      if ($order.client_order_id) {
-        $null = Bridge '/counter/orders/status' 'POST' @{ client_order_id = $order.client_order_id; counter_status = 'COMPLETED' }
-      } else {
-        $access = Bridge '/counter/staff-access?role=kitchen'
-        $ticketUri = $script:webAppUrl + '/api/staff/kitchen-tickets'
-        $bearerToken = "Bearer " + $access.access_token
-        $hdrs = @{ Authorization = $bearerToken }
-        $body = @{ order_id = $order.order_id; status = 'COMPLETED' } | ConvertTo-Json -Compress
-        $null = Invoke-RestMethod -Method Patch -Uri $ticketUri -TimeoutSec 5 -Headers $hdrs -ContentType 'application/json' -Body $body
-      }
-      Reload-Counter
-      $ui_status.Text = "Order #$($order.sequence_no) completed."
-    } catch {
-      $ui_status.Text = $_.Exception.Message
-    }
-  }
-})
+  })
+}
 
 # Rider Deliveries Actions
 $ui_btnRiderDispatched.Add_Click({

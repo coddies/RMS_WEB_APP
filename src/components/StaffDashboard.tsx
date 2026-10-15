@@ -124,10 +124,14 @@ export default function StaffDashboard({ session: initialSession }: { session: S
   // Orders State
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderFilter, setOrderFilter] = useState<"all" | "dinein" | "delivery" | "pickup" | "urgent">("all");
+  const [kitchenFilter, setKitchenFilter] = useState<"all" | "queued" | "cooking" | "ready">("all");
+  const [approvedOrderIds, setApprovedOrderIds] = useState<Set<string>>(new Set());
+  const [newOrderToast, setNewOrderToast] = useState<Order | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [alertedOrderId, setAlertedOrderId] = useState<string | null>(null);
   const [orderActionLoading, setOrderActionLoading] = useState<Record<string, boolean>>({});
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Menu State
   const [categories, setCategories] = useState<Category[]>([]);
@@ -207,40 +211,125 @@ export default function StaffDashboard({ session: initialSession }: { session: S
   const [dashboardNotice, setDashboardNotice] = useState("");
   const [dashboardError, setDashboardError] = useState("");
 
-  const audioCtx = useRef<AudioContext | null>(null);
   const seenOrderIds = useRef<Set<string>>(new Set());
 
-  // ── SOUND ALERT ──
-  function playBeep() {
+  // Sync approved orders with localStorage on mount
+  useEffect(() => {
     try {
-      if (!soundEnabled) return;
-      audioCtx.current ??= new AudioContext();
-      if (audioCtx.current.state === "suspended") {
-        void audioCtx.current.resume();
+      const saved = localStorage.getItem("rms_approved_orders");
+      if (saved) {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr)) {
+          setApprovedOrderIds(new Set(arr));
+        }
       }
-      const ctx = audioCtx.current;
+    } catch {}
+  }, []);
+
+  // ── APPROVE ORDER HELPER (Moves from awaiting approval to kitchen queue) ──
+  function approveOrder(orderId: string, orderNumber: string | number) {
+    setApprovedOrderIds((prev) => {
+      const next = new Set(prev);
+      next.add(orderId);
+      try {
+        localStorage.setItem("rms_approved_orders", JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+
+    // Notify local bridge offline database if running
+    void fetch("http://127.0.0.1:8765/counter/orders/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_order_id: orderId })
+    }).catch(() => {});
+
+    setDashboardNotice(`Order #${orderNumber} approved and sent to kitchen queue.`);
+    setTimeout(() => setDashboardNotice(""), 3500);
+  }
+
+  // ── PRINT SLIP HELPER (Prints ticket to local POS printer or browser dialog) ──
+  async function handlePrintSlip(order: Order) {
+    // 1. Try sending directly to local bridge printer service
+    try {
+      const res = await fetch("http://127.0.0.1:8765/print", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_order_id: order.id,
+          order_number: `#${order.order_number}`,
+          order_type: order.order_type,
+          table_number: order.table_number,
+          total_amount: order.total_amount,
+          items: order.items,
+          print_type: "KOT"
+        })
+      });
+      if (res.ok) {
+        setDashboardNotice(`Printed kitchen ticket for Order #${order.order_number}.`);
+        setTimeout(() => setDashboardNotice(""), 3000);
+        return;
+      }
+    } catch {}
+
+    // 2. Fallback: Browser printing pop-up slip
+    const printWindow = window.open("", "_blank", "width=380,height=600");
+    if (printWindow) {
+      const itemsHtml = order.items
+        .map(
+          (it) =>
+            `<div style="display:flex;justify-content:space-between;margin:4px 0;font-size:12px;"><span>${it.quantity}x ${it.name}</span><span>${it.price ? `Rs ${it.price * it.quantity}` : ""}</span></div>`
+        )
+        .join("");
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Kitchen Ticket - #${order.order_number}</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; font-size: 13px; padding: 14px; margin: 0; color: #000; }
+              .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 8px; margin-bottom: 10px; }
+              .footer { border-top: 2px dashed #000; padding-top: 8px; margin-top: 10px; text-align: right; font-weight: bold; font-size: 14px; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h2 style="margin:0;font-size:18px;">IGNITE SMOKEHOUSE &amp; GRILL</h2>
+              <div style="font-size:12px;margin:2px 0;">Order #${order.order_number}</div>
+              <div style="font-weight:bold;font-size:13px;">${order.order_type === "DINE_IN" ? `Table ${order.table_number || "STAND"}` : order.order_type}</div>
+              <div style="font-size:11px;color:#555;">${new Date(order.created_at).toLocaleTimeString()}</div>
+            </div>
+            <div>${itemsHtml}</div>
+            <div class="footer">
+              TOTAL: Rs ${order.total_amount || 0}
+            </div>
+            <script>
+              window.onload = function() { window.print(); window.close(); }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  }
+
+  // Single short notification sound per new order (Web Audio Synth - no external assets needed)
+  function playNewOrderSound() {
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = "sine";
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.15);
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      osc.stop(ctx.currentTime + 0.25);
+      osc.stop(ctx.currentTime + 0.35);
     } catch {}
-  }
-
-  async function toggleSound() {
-    try {
-      audioCtx.current ??= new AudioContext();
-      await audioCtx.current.resume();
-      setSoundEnabled((prev) => !prev);
-    } catch {
-      setSoundEnabled(false);
-    }
   }
 
   // ── LOAD ORDERS ──
@@ -251,12 +340,15 @@ export default function StaffDashboard({ session: initialSession }: { session: S
       const data = await res.json();
       const fetched = (data.orders || []) as Order[];
 
-      // Detect new incoming orders for chime
+      // Detect new incoming order for single toast + single sound
       const newlyFound = fetched.find((o) => !seenOrderIds.current.has(o.id));
       if (newlyFound && seenOrderIds.current.size > 0) {
-        setAlertedOrderId(newlyFound.id);
-        playBeep();
-        setTimeout(() => setAlertedOrderId(null), 4000);
+        setNewOrderToast(newlyFound);
+        playNewOrderSound();
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => {
+          setNewOrderToast(null);
+        }, 5500);
       }
       fetched.forEach((o) => seenOrderIds.current.add(o.id));
       setOrders(fetched);
@@ -671,29 +763,67 @@ export default function StaffDashboard({ session: initialSession }: { session: S
   const inStockCount = allMenuItems.filter((i) => i.in_stock).length;
   const soldOutCount = allMenuItems.length - inStockCount;
 
-  // Filtered orders
+  // Active orders stats & ledger computation
+  const now = Date.now();
+  let delayedCount = 0;
+  let cookingCount = 0;
+  let readyCount = 0;
+  let totalWaitSec = 0;
+  let activeCount = 0;
+
+  orders.forEach((o) => {
+    const ageSec = Math.max(0, Math.floor((now - new Date(o.created_at).getTime()) / 1000));
+    const ageMin = Math.floor(ageSec / 60);
+    const isDelayed = ageMin >= 15 && o.status !== "COMPLETED" && o.status !== "CANCELLED";
+    if (isDelayed) delayedCount++;
+    if (o.status === "PREPARING") cookingCount++;
+    if (o.status === "READY") readyCount++;
+    if (o.status !== "COMPLETED" && o.status !== "CANCELLED") {
+      totalWaitSec += ageSec;
+      activeCount++;
+    }
+  });
+
+  const avgSec = activeCount > 0 ? Math.floor(totalWaitSec / activeCount) : 0;
+  const avgMin = Math.floor(avgSec / 60);
+  const avgRemSec = avgSec % 60;
+  const avgWaitText = `${avgMin}m ${avgRemSec}s`;
+
+  // Filtered orders for Orders Tab
   const filteredOrders = orders.filter((o) => {
     if (orderFilter === "dinein" && o.order_type !== "DINE_IN") return false;
-    if (orderFilter === "delivery" && o.order_type !== "DELIVERY") return false;
-    if (orderFilter === "pickup" && o.order_type !== "PICKUP") return false;
+    if (orderFilter === "delivery" && o.order_type !== "DELIVERY" && o.order_type !== "PICKUP") return false;
     if (orderFilter === "urgent") {
-      const minsOld = (Date.now() - new Date(o.created_at).getTime()) / 60000;
-      if (minsOld < 15 || o.status === "COMPLETED") return false;
+      const minsOld = (now - new Date(o.created_at).getTime()) / 60000;
+      if (minsOld < 15 || o.status === "COMPLETED" || o.status === "CANCELLED") return false;
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchNum = String(o.order_number).includes(q);
-      const matchCust = (o.customer_name || "").toLowerCase().includes(q);
+      const matchCust = (o.customer_name || "").toLowerCase().includes(q) || (o.customer_phone || "").includes(q);
       const matchTable = (o.table_number || "").toLowerCase().includes(q);
-      if (!matchNum && !matchCust && !matchTable) return false;
+      const matchItems = o.items.some((it) => it.name.toLowerCase().includes(q));
+      if (!matchNum && !matchCust && !matchTable && !matchItems) return false;
     }
     return true;
   });
 
-  // Kitchen KDS Columns
-  const kdsReceived = orders.filter((o) => o.status === "PENDING");
-  const kdsPreparing = orders.filter((o) => o.status === "PREPARING");
-  const kdsReady = orders.filter((o) => o.status === "READY");
+  // Approved tickets active for Kitchen (KDS)
+  const approvedOrders = orders.filter((o) => {
+    const isApproved = approvedOrderIds.has(o.id) || o.status === "PREPARING" || o.status === "READY";
+    return isApproved && o.status !== "COMPLETED" && o.status !== "CANCELLED";
+  });
+
+  const kitchenTickets = approvedOrders.filter((ticket) => {
+    if (kitchenFilter === "queued" && ticket.status !== "PENDING") return false;
+    if (kitchenFilter === "cooking" && ticket.status !== "PREPARING") return false;
+    if (kitchenFilter === "ready" && ticket.status !== "READY") return false;
+    return true;
+  });
+
+  const kdsReceived = approvedOrders.filter((o) => o.status === "PENDING");
+  const kdsPreparing = approvedOrders.filter((o) => o.status === "PREPARING");
+  const kdsReady = approvedOrders.filter((o) => o.status === "READY");
 
   // Selected item for Special Offer preview
   const selectedOfferItem = allMenuItems.find((i) => i.id === offerForm.menu_item_id);
@@ -898,71 +1028,105 @@ export default function StaffDashboard({ session: initialSession }: { session: S
         {/* Top Header */}
         <header
           style={{
-            height: "60px",
-            background: "rgba(19, 19, 19, 0.95)",
-            borderBottom: "1px solid #2A2A2A",
+            height: "64px",
+            background: "#161B22",
+            borderBottom: "1px solid #222736",
             padding: "0 24px",
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between"
+            justifyContent: "space-between",
+            flexShrink: 0
           }}
         >
-          <div>
-            <h2 style={{ margin: 0, fontSize: "16px", color: "#FFFFFF", fontWeight: "700" }}>
-              {activeTab === "orders" && "Live Orders Pipeline"}
-              {activeTab === "kitchen" && "Kitchen Display System (KDS)"}
-              {activeTab === "menu" && "Catalog & Menu Management"}
-              {activeTab === "offers" && "Promotions & Special Offers"}
-              {activeTab === "inventory" && "Raw Ingredient Stock & Vendor Dispatch"}
-              {activeTab === "marketplace" && "Software Provider Supplier Marketplace"}
-              {activeTab === "qrcodes" && "Table QR Code Generator & Prints"}
-              {activeTab === "staff" && "Operator Accounts & PIN Security"}
-              {activeTab === "reports" && "Sales Summary & Diagnostic Reports"}
-              {activeTab === "settings" && "Restaurant Contact & WhatsApp Settings"}
-            </h2>
-          </div>
-
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            {/* Audio Alert Toggle */}
-            <button
-              onClick={toggleSound}
+            <div
               style={{
-                height: "34px",
-                padding: "0 12px",
-                background: soundEnabled ? "#065F46" : "#222736",
-                color: soundEnabled ? "#34D399" : "#8B949E",
-                border: "1px solid #2A2A2A",
-                borderRadius: "6px",
-                fontSize: "11px",
-                fontWeight: "700",
-                cursor: "pointer",
+                width: "38px",
+                height: "38px",
+                borderRadius: "8px",
+                background: "#DC2626",
                 display: "flex",
                 alignItems: "center",
-                gap: "6px"
+                justifyContent: "center",
+                fontWeight: "900",
+                color: "#FFFFFF",
+                fontSize: "18px"
               }}
             >
-              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: soundEnabled ? "#10B981" : "#6B7280" }} />
-              {soundEnabled ? "Audio Alert: Active" : "Audio Alert: Muted"}
-            </button>
+              I
+            </div>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: "16px", fontWeight: "800", color: "#F0F0F0", letterSpacing: "0.5px" }}>
+                {settings.brand_name.toUpperCase()}
+              </span>
+              <span style={{ fontSize: "11px", color: "#8B949E", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                Main Dining Floor &amp; Smokehouse Pit
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            {/* KDS SYNCED Status Pill */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "6px 14px",
+                borderRadius: "6px",
+                background: "#1A1E29",
+                border: "1px solid #222736"
+              }}
+            >
+              <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10B981" }} />
+              <span style={{ fontSize: "11px", fontWeight: "700", color: "#F0F0F0", letterSpacing: "0.5px" }}>
+                KDS SYNCED
+              </span>
+            </div>
+
+            {/* Operator Info */}
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", borderLeft: "1px solid #222736", paddingLeft: "14px" }}>
+              <div style={{ textAlign: "right" }}>
+                <span style={{ fontSize: "13px", fontWeight: "700", color: "#F0F0F0", display: "block" }}>{session.name}</span>
+                <span style={{ fontSize: "10px", color: "#DC2626", fontWeight: "700", textTransform: "uppercase" }}>{session.role}</span>
+              </div>
+              <div
+                style={{
+                  width: "34px",
+                  height: "34px",
+                  borderRadius: "50%",
+                  background: "#DC2626",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#FFF",
+                  fontWeight: "800",
+                  fontSize: "13px"
+                }}
+              >
+                {session.name.charAt(0).toUpperCase()}
+              </div>
+            </div>
 
             {/* Customer Menu Link */}
             <Link
               href="/"
               target="_blank"
               style={{
-                height: "34px",
-                padding: "0 14px",
+                height: "36px",
+                padding: "0 16px",
                 background: "#DC2626",
                 color: "#FFFFFF",
                 borderRadius: "6px",
-                fontSize: "11px",
+                fontSize: "12px",
                 fontWeight: "700",
                 textDecoration: "none",
                 display: "flex",
-                alignItems: "center"
+                alignItems: "center",
+                gap: "6px"
               }}
             >
-              View Guest Menu
+              <span>View Guest Menu</span>
             </Link>
           </div>
         </header>
@@ -982,379 +1146,759 @@ export default function StaffDashboard({ session: initialSession }: { session: S
         {/* Tab View Container */}
         <main style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
           {/* ═════════════════════════════════════════════════════════════════════ */}
-          {/* TAB 1: LIVE ORDERS (A4, B3) */}
+          {/* TAB 1: LIVE ORDERS (SIMPLIFIED UNIFIED FLOW) */}
           {/* ═════════════════════════════════════════════════════════════════════ */}
           {activeTab === "orders" && (
-            <div>
-              {/* Filter and Search Bar */}
-              <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center" }}>
-                <div style={{ display: "flex", gap: "6px", background: "#181818", padding: "4px", borderRadius: "8px", border: "1px solid #2A2A2A" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Operational Metric Bar & Filters */}
+              <div
+                style={{
+                  background: "#161B22",
+                  border: "1px solid #222736",
+                  borderRadius: "10px",
+                  padding: "12px 16px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "12px"
+                }}
+              >
+                {/* Filter Tabs */}
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
                   {[
-                    { id: "all", label: "All Orders" },
-                    { id: "dinein", label: "Dine-In" },
-                    { id: "delivery", label: "Delivery" },
-                    { id: "pickup", label: "Pickup" },
-                    { id: "urgent", label: "Urgent (>15m)" }
-                  ].map((f) => (
-                    <button
-                      key={f.id}
-                      onClick={() => setOrderFilter(f.id as typeof orderFilter)}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "6px",
-                        border: 0,
-                        background: orderFilter === f.id ? "#DC2626" : "transparent",
-                        color: orderFilter === f.id ? "#FFFFFF" : "#8B949E",
-                        fontSize: "12px",
-                        fontWeight: "700",
-                        cursor: "pointer"
-                      }}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
+                    { id: "all", label: "All", count: orders.length },
+                    { id: "dinein", label: "Dine-In", count: orders.filter((o) => o.order_type === "DINE_IN").length },
+                    { id: "delivery", label: "Delivery", count: orders.filter((o) => o.order_type === "DELIVERY" || o.order_type === "PICKUP").length },
+                    { id: "urgent", label: "Urgent (>15m)", count: delayedCount, isUrgent: true }
+                  ].map((f) => {
+                    const isSelected = orderFilter === f.id;
+                    return (
+                      <button
+                        key={f.id}
+                        onClick={() => setOrderFilter(f.id as typeof orderFilter)}
+                        style={{
+                          height: "40px",
+                          padding: "0 16px",
+                          borderRadius: "8px",
+                          border: isSelected ? 0 : "1px solid #2C3240",
+                          background: isSelected ? "#DC2626" : "#1A1E29",
+                          color: isSelected ? "#FFFFFF" : f.isUrgent ? "#EF4444" : "#8B949E",
+                          fontSize: "12px",
+                          fontWeight: "700",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px"
+                        }}
+                      >
+                        <span>{f.label}</span>
+                        <span
+                          style={{
+                            background: isSelected ? "rgba(0,0,0,0.3)" : "#222736",
+                            padding: "2px 6px",
+                            borderRadius: "999px",
+                            fontSize: "10px"
+                          }}
+                        >
+                          {f.count}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <input
-                  type="text"
-                  placeholder="Search order #, customer name, table..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{
-                    flex: 1,
-                    minWidth: "220px",
-                    height: "38px",
-                    background: "#181818",
-                    border: "1px solid #2A2A2A",
-                    borderRadius: "6px",
-                    padding: "0 12px",
-                    color: "#FFFFFF",
-                    fontSize: "12px"
-                  }}
-                />
+                {/* Search & Avg Wait */}
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, maxWidth: "520px" }}>
+                  <input
+                    type="text"
+                    placeholder="Search order #, table, customer or item..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{
+                      flex: 1,
+                      height: "40px",
+                      background: "#0D0D0D",
+                      border: "1px solid #2C3240",
+                      borderRadius: "8px",
+                      padding: "0 14px",
+                      color: "#F0F0F0",
+                      fontSize: "12px"
+                    }}
+                  />
+                  <div
+                    style={{
+                      height: "40px",
+                      padding: "0 14px",
+                      borderRadius: "8px",
+                      background: "#0D0D0D",
+                      border: "1px solid #2C3240",
+                      display: "flex",
+                      alignItems: "center",
+                      fontSize: "12px",
+                      color: "#8B949E",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    Avg Wait: <strong style={{ color: "#F0F0F0", marginLeft: "4px" }}>{avgWaitText}</strong>
+                  </div>
+                </div>
               </div>
 
               {/* Order Cards Grid */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "16px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: "16px" }}>
                 {filteredOrders.length === 0 ? (
-                  <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "60px 20px", color: "#8B949E" }}>
+                  <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "80px 20px", color: "#8B949E" }}>
                     No orders matching this filter.
                   </div>
                 ) : (
                   filteredOrders.map((order) => {
-                    const isAlerted = alertedOrderId === order.id;
-                    const minsAgo = Math.max(0, Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000));
-                    const isBusy = orderActionLoading[order.id];
+                    const ageSec = Math.max(0, Math.floor((now - new Date(order.created_at).getTime()) / 1000));
+                    const totalMins = Math.floor(ageSec / 60);
+                    const remSecs = ageSec % 60;
+                    const ageText = `${totalMins}m ${remSecs}s`;
+                    const isDelayed = totalMins >= 15 && order.status !== "COMPLETED" && order.status !== "CANCELLED";
+                    const isApproved = approvedOrderIds.has(order.id) || order.status === "PREPARING" || order.status === "READY" || order.status === "COMPLETED";
 
                     return (
-                      <div
+                      <article
                         key={order.id}
                         style={{
-                          background: "#181818",
-                          border: isAlerted ? "2px solid #DC2626" : "1px solid #2A2A2A",
+                          background: "#161B22",
+                          border: isDelayed ? "1px solid #920703" : "1px solid #222736",
                           borderRadius: "10px",
-                          padding: "16px",
+                          overflow: "hidden",
                           display: "flex",
                           flexDirection: "column",
                           justifyContent: "space-between",
-                          transition: "border 0.2s"
+                          boxShadow: "0 4px 16px rgba(0,0,0,0.4)"
                         }}
                       >
-                        {/* Header */}
                         <div>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-                            <div>
-                              <strong style={{ fontSize: "16px", color: "#FFFFFF" }}>Order #{order.order_number}</strong>
-                              <span style={{ display: "block", fontSize: "11px", color: minsAgo > 15 ? "#EF4444" : "#8B949E", fontWeight: "600" }}>
-                                {minsAgo}m ago
-                              </span>
-                            </div>
-
-                            {/* Order Type Badge (B3) */}
+                          {/* Top Urgency Ribbon */}
+                          <div
+                            style={{
+                              background: isDelayed ? "#920703" : "#1A1E29",
+                              padding: "8px 14px",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center"
+                            }}
+                          >
                             <span
                               style={{
-                                padding: "3px 8px",
-                                borderRadius: "4px",
                                 fontSize: "10px",
                                 fontWeight: "800",
-                                background:
-                                  order.order_type === "DINE_IN" ? "#2563EB" : order.order_type === "DELIVERY" ? "#D97706" : "#059669",
-                                color: "#FFFFFF"
+                                letterSpacing: "0.5px",
+                                color: isDelayed ? "#FFFFFF" : "#8B949E",
+                                textTransform: "uppercase"
                               }}
                             >
-                              {order.order_type === "DINE_IN"
-                                ? `TABLE ${order.table_number || "STAND"}`
-                                : order.order_type === "DELIVERY"
-                                ? "DELIVERY"
-                                : "PICKUP"}
+                              {isDelayed ? "DELAYED CRITICAL: >15m" : "WAIT TIME"}
                             </span>
-                          </div>
-
-                          {/* Customer info based on order_type (B3) */}
-                          {order.order_type === "DELIVERY" && (
-                            <div style={{ background: "#201F1F", padding: "8px 10px", borderRadius: "6px", marginBottom: "10px", fontSize: "11px" }}>
-                              <strong style={{ color: "#FFFFFF" }}>{order.customer_name || "Guest Customer"}</strong>
-                              <span style={{ color: "#8B949E", display: "block" }}>{order.customer_phone}</span>
-                              <span style={{ color: "#E5E2E1", display: "block", marginTop: "2px" }}>{order.customer_address}</span>
-                            </div>
-                          )}
-
-                          {order.order_type === "PICKUP" && (
-                            <div style={{ background: "#201F1F", padding: "8px 10px", borderRadius: "6px", marginBottom: "10px", fontSize: "11px" }}>
-                              <strong style={{ color: "#FFFFFF" }}>{order.customer_name || "Pickup Guest"}</strong>
-                              <span style={{ color: "#8B949E", display: "block" }}>Phone: {order.customer_phone}</span>
-                            </div>
-                          )}
-
-                          {/* Items List */}
-                          <div style={{ borderTop: "1px solid #2A2A2A", paddingTop: "8px", marginBottom: "12px" }}>
-                            {order.items.map((it, idx) => (
-                              <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#C9D1D9", margin: "3px 0" }}>
-                                <span>{it.quantity}x {it.name}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Status Pipeline Actions (A2, A3, B3) */}
-                        <div style={{ borderTop: "1px solid #2A2A2A", paddingTop: "10px" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                            <span style={{ fontSize: "11px", color: "#8B949E" }}>Status:</span>
                             <span
                               style={{
-                                fontSize: "11px",
+                                fontSize: "12px",
                                 fontWeight: "800",
-                                color:
-                                  order.status === "PENDING"
-                                    ? "#F59E0B"
-                                    : order.status === "PREPARING"
-                                    ? "#3B82F6"
-                                    : order.status === "READY"
-                                    ? "#10B981"
-                                    : "#6B7280"
+                                color: isDelayed ? "#FFFFFF" : "#F0F0F0"
                               }}
                             >
-                              {order.status}
+                              {ageText}
                             </span>
                           </div>
 
-                          {/* Action Buttons branching by order_type & status */}
-                          <div style={{ display: "flex", gap: "6px" }}>
-                            {order.status === "PENDING" && (
-                              <button
-                                disabled={isBusy}
-                                onClick={() => updateOrderStatus(order.id, "PREPARING")}
+                          {/* Header Section */}
+                          <div style={{ padding: "14px 14px 10px 14px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                              <div>
+                                <span style={{ fontSize: "18px", fontWeight: "800", color: "#F0F0F0", display: "block", letterSpacing: "-0.5px" }}>
+                                  #ORD-{order.order_number}
+                                </span>
+                                <span style={{ fontSize: "11px", color: "#8B949E" }}>
+                                  {order.order_type === "DINE_IN" ? `Table ${order.table_number || "STAND"}` : order.customer_name || "Online Guest"} · QR Terminal
+                                </span>
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                                <span
+                                  style={{
+                                    padding: "3px 8px",
+                                    borderRadius: "4px",
+                                    fontSize: "10px",
+                                    fontWeight: "800",
+                                    background: "#1A1E29",
+                                    color: "#F0F0F0",
+                                    border: "1px solid #222736"
+                                  }}
+                                >
+                                  {order.order_type === "DINE_IN"
+                                    ? `Table #${order.table_number || "01"}`
+                                    : order.order_type === "DELIVERY"
+                                    ? "Delivery"
+                                    : "Pickup"}
+                                </span>
+                                <span
+                                  style={{
+                                    padding: "2px 7px",
+                                    borderRadius: "4px",
+                                    fontSize: "10px",
+                                    fontWeight: "800",
+                                    background: !isApproved
+                                      ? "#920703"
+                                      : order.status === "PREPARING"
+                                      ? "#2A1F11"
+                                      : order.status === "READY"
+                                      ? "#133526"
+                                      : "#1A1E29",
+                                    color: !isApproved
+                                      ? "#FFFFFF"
+                                      : order.status === "PREPARING"
+                                      ? "#F59E0B"
+                                      : order.status === "READY"
+                                      ? "#10B981"
+                                      : "#3B82F6"
+                                  }}
+                                >
+                                  {!isApproved
+                                    ? "AWAITING APPROVAL"
+                                    : order.status === "PREPARING"
+                                    ? "COOKING"
+                                    : order.status === "READY"
+                                    ? "READY"
+                                    : order.status === "COMPLETED"
+                                    ? "COMPLETED"
+                                    : "IN KITCHEN"}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Customer info for Delivery / Pickup */}
+                            {order.order_type === "DELIVERY" && (
+                              <div
                                 style={{
-                                  flex: 1,
-                                  height: "34px",
-                                  background: "#DC2626",
-                                  color: "#FFF",
-                                  border: 0,
+                                  background: "#1A1E29",
+                                  padding: "8px 10px",
                                   borderRadius: "6px",
+                                  marginBottom: "10px",
                                   fontSize: "11px",
-                                  fontWeight: "700",
-                                  cursor: "pointer"
+                                  border: "1px solid #222736"
                                 }}
                               >
-                                {isBusy ? "Updating..." : "Start Cooking"}
-                              </button>
+                                <strong style={{ color: "#F0F0F0" }}>{order.customer_name || "Guest Customer"}</strong>
+                                <span style={{ color: "#8B949E", display: "block" }}>{order.customer_phone}</span>
+                                <span style={{ color: "#E5E2E1", display: "block", marginTop: "2px" }}>{order.customer_address}</span>
+                              </div>
                             )}
 
-                            {order.status === "PREPARING" && (
-                              <button
-                                disabled={isBusy}
-                                onClick={() => updateOrderStatus(order.id, "READY")}
-                                style={{
-                                  flex: 1,
-                                  height: "34px",
-                                  background: "#10B981",
-                                  color: "#FFF",
-                                  border: 0,
-                                  borderRadius: "6px",
-                                  fontSize: "11px",
-                                  fontWeight: "700",
-                                  cursor: "pointer"
-                                }}
-                              >
-                                {isBusy ? "Updating..." : "Mark Ready ✓"}
-                              </button>
-                            )}
+                            {/* Items Ledger with Item Thumbnail */}
+                            <div style={{ borderTop: "1px solid #222736", borderBottom: "1px solid #222736", padding: "8px 0", margin: "8px 0" }}>
+                              {order.items.map((it, idx) => (
+                                <div key={idx} style={{ display: "flex", alignItems: "center", gap: "10px", margin: "6px 0" }}>
+                                  {/* 32x32 item thumbnail per DESIGN_FINAL §2.1 */}
+                                  <div
+                                    style={{
+                                      width: "32px",
+                                      height: "32px",
+                                      borderRadius: "6px",
+                                      background: "#1A1E29",
+                                      border: "1px solid #222736",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      fontSize: "14px",
+                                      flexShrink: 0,
+                                      overflow: "hidden"
+                                    }}
+                                  >
+                                    🍽️
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#F0F0F0", fontWeight: "700" }}>
+                                      <span>{it.quantity}x {it.name}</span>
+                                      {it.price && <span style={{ color: "#8B949E", fontWeight: "400" }}>Rs {it.price * it.quantity}</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
 
-                            {order.status === "READY" && (
-                              <button
-                                disabled={isBusy}
-                                onClick={() => updateOrderStatus(order.id, "COMPLETED")}
-                                style={{
-                                  flex: 1,
-                                  height: "34px",
-                                  background: "#047857",
-                                  color: "#FFF",
-                                  border: 0,
-                                  borderRadius: "6px",
-                                  fontSize: "11px",
-                                  fontWeight: "700",
-                                  cursor: "pointer"
-                                }}
-                              >
+                            {/* Payment Summary */}
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "4px" }}>
+                              <span style={{ fontSize: "11px", fontWeight: "700", color: order.payment_status === "PAID" ? "#10B981" : "#8B949E" }}>
                                 {order.order_type === "DINE_IN"
-                                  ? "Serve to Table ✓"
-                                  : order.order_type === "PICKUP"
-                                  ? "Hand to Customer ✓"
-                                  : "Dispatched ✓"}
-                              </button>
-                            )}
-
-                            {order.status === "COMPLETED" && (
-                              <span style={{ fontSize: "11px", color: "#10B981", fontWeight: "700", margin: "auto" }}>
-                                Order Completed ✓
+                                  ? order.payment_status === "PAID" ? "Paid Dine-In" : "Unpaid Dine-In"
+                                  : order.payment_status === "PAID" ? "Paid Online" : "Cash on Delivery"}
                               </span>
-                            )}
+                              <div style={{ textAlign: "right" }}>
+                                <span style={{ fontSize: "10px", color: "#8B949E", display: "block", lineHeight: 1 }}>TOTAL</span>
+                                <span style={{ fontSize: "16px", fontWeight: "800", color: "#FFFFFF" }}>
+                                  Rs {order.total_amount || 0}
+                                </span>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
+
+                        {/* Action Buttons Footer - EXACTLY TWO ACTIONS */}
+                        <div style={{ padding: "0 14px 14px 14px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                          {/* Action 1: Approve or Read-Only Status */}
+                          {!isApproved ? (
+                            <button
+                              onClick={() => approveOrder(order.id, order.order_number)}
+                              style={{
+                                height: "38px",
+                                background: "#DC2626",
+                                color: "#FFFFFF",
+                                border: 0,
+                                borderRadius: "6px",
+                                fontSize: "12px",
+                                fontWeight: "700",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "4px"
+                              }}
+                            >
+                              <span>✓</span> Approve
+                            </button>
+                          ) : (
+                            <div
+                              style={{
+                                height: "38px",
+                                background: "#1A1E29",
+                                border: "1px solid #222736",
+                                borderRadius: "6px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "12px",
+                                fontWeight: "700",
+                                color:
+                                  order.status === "READY"
+                                    ? "#10B981"
+                                    : order.status === "PREPARING"
+                                    ? "#F59E0B"
+                                    : order.status === "COMPLETED"
+                                    ? "#10B981"
+                                    : "#3B82F6"
+                              }}
+                            >
+                              {order.status === "READY"
+                                ? "Ready"
+                                : order.status === "PREPARING"
+                                ? "Cooking"
+                                : order.status === "COMPLETED"
+                                ? "Completed"
+                                : "In Kitchen"}
+                            </div>
+                          )}
+
+                          {/* Action 2: Print Slip */}
+                          <button
+                            onClick={() => handlePrintSlip(order)}
+                            style={{
+                              height: "38px",
+                              background: "#1A1E29",
+                              color: "#F0F0F0",
+                              border: "1px solid #222736",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: "4px"
+                            }}
+                          >
+                            <span>🖨️</span> Print Slip
+                          </button>
+                        </div>
+                      </article>
                     );
                   })
                 )}
+              </div>
+
+              {/* Active Station Footer Ledger */}
+              <div
+                style={{
+                  marginTop: "16px",
+                  padding: "14px 18px",
+                  background: "#161B22",
+                  borderRadius: "10px",
+                  border: "1px solid #222736",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "12px"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "18px", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#EF4444" }} />
+                    <span style={{ fontSize: "12px", color: "#8B949E" }}>Delayed &gt; 15m ({delayedCount})</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#F59E0B" }} />
+                    <span style={{ fontSize: "12px", color: "#8B949E" }}>In Kitchen ({cookingCount})</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10B981" }} />
+                    <span style={{ fontSize: "12px", color: "#8B949E" }}>Ready for Service ({readyCount})</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => void loadOrders()}
+                  style={{
+                    height: "36px",
+                    padding: "0 16px",
+                    background: "#DC2626",
+                    color: "#FFFFFF",
+                    border: 0,
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    fontWeight: "700",
+                    cursor: "pointer"
+                  }}
+                >
+                  Sync All Tickets
+                </button>
               </div>
             </div>
           )}
 
           {/* ═════════════════════════════════════════════════════════════════════ */}
-          {/* TAB 2: KITCHEN DISPLAY SYSTEM (KDS) (A2, A3) */}
+          {/* TAB 2: KITCHEN DISPLAY SYSTEM (KDS) (SIMPLIFIED UNIFIED FLOW) */}
           {/* ═════════════════════════════════════════════════════════════════════ */}
           {activeTab === "kitchen" && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", minHeight: "75vh" }}>
-              {/* Column 1: Received / Pending */}
-              <div style={{ background: "#14171F", border: "1px solid #2A2A2A", borderRadius: "10px", padding: "16px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-                  <strong style={{ color: "#F59E0B", fontSize: "14px", fontWeight: "800" }}>1. NEW ORDERS</strong>
-                  <span style={{ background: "#F59E0B", color: "#111", padding: "2px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: "800" }}>
-                    {kdsReceived.length}
-                  </span>
-                </div>
-
-                <div style={{ display: "grid", gap: "10px" }}>
-                  {kdsReceived.map((order) => (
-                    <div key={order.id} style={{ background: "#1C1B1B", border: "1px solid #333", borderRadius: "8px", padding: "12px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                        <strong style={{ color: "#FFF", fontSize: "14px" }}>#{order.order_number}</strong>
-                        <span style={{ color: "#DC2626", fontWeight: "800", fontSize: "11px" }}>
-                          {order.order_type === "DINE_IN" ? `TABLE ${order.table_number || "STAND"}` : order.order_type}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: "12px", color: "#C9D1D9", margin: "6px 0" }}>
-                        {order.items.map((it, idx) => (
-                          <div key={idx}>• {it.quantity}x {it.name}</div>
-                        ))}
-                      </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Kitchen Metric Bar & Tabs */}
+              <div
+                style={{
+                  background: "#161B22",
+                  border: "1px solid #222736",
+                  borderRadius: "10px",
+                  padding: "12px 16px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "12px"
+                }}
+              >
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                  {[
+                    { id: "all", label: "All Tickets", count: approvedOrders.length },
+                    { id: "queued", label: "Queued", count: kdsReceived.length },
+                    { id: "cooking", label: "Cooking", count: kdsPreparing.length },
+                    { id: "ready", label: "Ready", count: kdsReady.length }
+                  ].map((f) => {
+                    const isSelected = kitchenFilter === f.id;
+                    return (
                       <button
-                        onClick={() => updateOrderStatus(order.id, "PREPARING")}
+                        key={f.id}
+                        onClick={() => setKitchenFilter(f.id as typeof kitchenFilter)}
                         style={{
-                          width: "100%",
-                          height: "36px",
-                          background: "#DC2626",
-                          color: "#FFF",
-                          border: 0,
-                          borderRadius: "6px",
+                          height: "40px",
+                          padding: "0 16px",
+                          borderRadius: "8px",
+                          border: isSelected ? 0 : "1px solid #2C3240",
+                          background: isSelected ? "#DC2626" : "#1A1E29",
+                          color: isSelected ? "#FFFFFF" : "#8B949E",
                           fontSize: "12px",
                           fontWeight: "700",
                           cursor: "pointer",
-                          marginTop: "8px"
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px"
                         }}
                       >
-                        Start Cooking
+                        <span>{f.label}</span>
+                        <span
+                          style={{
+                            background: isSelected ? "rgba(0,0,0,0.3)" : "#222736",
+                            padding: "2px 6px",
+                            borderRadius: "999px",
+                            fontSize: "10px"
+                          }}
+                        >
+                          {f.count}
+                        </span>
                       </button>
-                    </div>
-                  ))}
+                    );
+                  })}
+                </div>
+
+                <div
+                  style={{
+                    height: "40px",
+                    padding: "0 14px",
+                    borderRadius: "8px",
+                    background: "#0D0D0D",
+                    border: "1px solid #2C3240",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px"
+                  }}
+                >
+                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10B981" }} />
+                  <span style={{ fontSize: "12px", fontWeight: "700", color: "#10B981" }}>KDS ACTIVE</span>
                 </div>
               </div>
 
-              {/* Column 2: In Preparation */}
-              <div style={{ background: "#14171F", border: "1px solid #2A2A2A", borderRadius: "10px", padding: "16px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-                  <strong style={{ color: "#3B82F6", fontSize: "14px", fontWeight: "800" }}>2. COOKING / PREP</strong>
-                  <span style={{ background: "#3B82F6", color: "#FFF", padding: "2px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: "800" }}>
-                    {kdsPreparing.length}
-                  </span>
-                </div>
+              {/* Kitchen Tickets Grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: "16px" }}>
+                {kitchenTickets.length === 0 ? (
+                  <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "80px 20px", color: "#8B949E" }}>
+                    No active kitchen tickets in this section.
+                  </div>
+                ) : (
+                  kitchenTickets.map((ticket) => {
+                    const ageSec = Math.max(0, Math.floor((now - new Date(ticket.created_at).getTime()) / 1000));
+                    const totalMins = Math.floor(ageSec / 60);
+                    const remSecs = ageSec % 60;
+                    const ageText = `${totalMins}m ${remSecs}s`;
+                    const isDelayed = totalMins >= 15;
+                    const isReady = ticket.status === "READY";
+                    const isCooking = ticket.status === "PREPARING";
+                    const isPending = ticket.status === "PENDING";
 
-                <div style={{ display: "grid", gap: "10px" }}>
-                  {kdsPreparing.map((order) => (
-                    <div key={order.id} style={{ background: "#1C1B1B", border: "1px solid #2563EB", borderRadius: "8px", padding: "12px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                        <strong style={{ color: "#FFF", fontSize: "14px" }}>#{order.order_number}</strong>
-                        <span style={{ color: "#3B82F6", fontWeight: "800", fontSize: "11px" }}>
-                          {order.order_type === "DINE_IN" ? `TABLE ${order.table_number || "STAND"}` : order.order_type}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: "12px", color: "#C9D1D9", margin: "6px 0" }}>
-                        {order.items.map((it, idx) => (
-                          <div key={idx}>• {it.quantity}x {it.name}</div>
-                        ))}
-                      </div>
-                      <button
-                        onClick={() => updateOrderStatus(order.id, "READY")}
+                    return (
+                      <article
+                        key={ticket.id}
                         style={{
-                          width: "100%",
-                          height: "36px",
-                          background: "#10B981",
-                          color: "#FFF",
-                          border: 0,
-                          borderRadius: "6px",
-                          fontSize: "12px",
-                          fontWeight: "700",
-                          cursor: "pointer",
-                          marginTop: "8px"
+                          background: "#161B22",
+                          border: isReady ? "2px solid #10B981" : isDelayed ? "1px solid #920703" : "1px solid #222736",
+                          borderRadius: "10px",
+                          overflow: "hidden",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                          boxShadow: "0 4px 16px rgba(0,0,0,0.4)"
                         }}
                       >
-                        Mark Ready ✓
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                        <div>
+                          {/* Top Ribbon */}
+                          <div
+                            style={{
+                              background: isReady ? "#133526" : isDelayed ? "#920703" : "#1A1E29",
+                              padding: "8px 14px",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center"
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                fontWeight: "800",
+                                letterSpacing: "0.5px",
+                                color: isReady ? "#10B981" : isDelayed ? "#FFFFFF" : "#8B949E",
+                                textTransform: "uppercase"
+                              }}
+                            >
+                              {isReady ? "READY ON PASS" : isDelayed ? "VIP CRITICAL WAIT: >15m" : "KITCHEN TIMER"}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: "12px",
+                                fontWeight: "800",
+                                color: isReady ? "#10B981" : isDelayed ? "#FFFFFF" : "#F0F0F0"
+                              }}
+                            >
+                              {ageText}
+                            </span>
+                          </div>
+
+                          {/* Header */}
+                          <div style={{ padding: "14px 14px 10px 14px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                              <div>
+                                <span style={{ fontSize: "18px", fontWeight: "800", color: "#F0F0F0", display: "block", letterSpacing: "-0.5px" }}>
+                                  #ORD-{ticket.order_number}
+                                </span>
+                                <span style={{ fontSize: "11px", color: "#8B949E" }}>
+                                  {ticket.order_type === "DINE_IN" ? `Table ${ticket.table_number || "STAND"}` : ticket.customer_name || "Online Order"}
+                                </span>
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                                <span
+                                  style={{
+                                    padding: "3px 8px",
+                                    borderRadius: "4px",
+                                    fontSize: "10px",
+                                    fontWeight: "800",
+                                    background: "#1A1E29",
+                                    color: "#F0F0F0",
+                                    border: "1px solid #222736"
+                                  }}
+                                >
+                                  {ticket.order_type === "DINE_IN" ? `Table #${ticket.table_number || "01"}` : ticket.order_type}
+                                </span>
+                                <span
+                                  style={{
+                                    padding: "2px 7px",
+                                    borderRadius: "4px",
+                                    fontSize: "10px",
+                                    fontWeight: "800",
+                                    background: isReady ? "#133526" : isCooking ? "#2A1F11" : "#1A1E29",
+                                    color: isReady ? "#10B981" : isCooking ? "#F59E0B" : "#3B82F6"
+                                  }}
+                                >
+                                  {isReady ? "READY" : isCooking ? "COOKING" : "QUEUED"}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Items Ledger */}
+                            <div style={{ borderTop: "1px solid #222736", padding: "8px 0", margin: "8px 0" }}>
+                              {ticket.items.map((it, idx) => (
+                                <div key={idx} style={{ display: "flex", alignItems: "center", gap: "10px", margin: "6px 0" }}>
+                                  <div
+                                    style={{
+                                      width: "32px",
+                                      height: "32px",
+                                      borderRadius: "6px",
+                                      background: "#1A1E29",
+                                      border: "1px solid #222736",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      fontSize: "14px",
+                                      flexShrink: 0
+                                    }}
+                                  >
+                                    🍽️
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: "13px", color: "#F0F0F0", fontWeight: "700" }}>
+                                      {it.quantity}x {it.name}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons Footer - EXACTLY TWO ACTIONS IN SEQUENCE */}
+                        <div style={{ padding: "0 14px 14px 14px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                          {/* Action 1: Start Cooking */}
+                          {isPending ? (
+                            <button
+                              onClick={() => updateOrderStatus(ticket.id, "PREPARING")}
+                              style={{
+                                height: "40px",
+                                background: "#DC2626",
+                                color: "#FFFFFF",
+                                border: 0,
+                                borderRadius: "6px",
+                                fontSize: "12px",
+                                fontWeight: "700",
+                                cursor: "pointer"
+                              }}
+                            >
+                              Start Cooking
+                            </button>
+                          ) : (
+                            <div
+                              style={{
+                                height: "40px",
+                                background: "#1A1E29",
+                                border: "1px solid #222736",
+                                borderRadius: "6px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "11px",
+                                fontWeight: "700",
+                                color: isReady ? "#10B981" : "#F59E0B"
+                              }}
+                            >
+                              {isReady ? "Cooked [OK]" : "Cooking..."}
+                            </div>
+                          )}
+
+                          {/* Action 2: Order Ready */}
+                          {isCooking ? (
+                            <button
+                              onClick={() => updateOrderStatus(ticket.id, "READY")}
+                              style={{
+                                height: "40px",
+                                background: "#10B981",
+                                color: "#FFFFFF",
+                                border: 0,
+                                borderRadius: "6px",
+                                fontSize: "12px",
+                                fontWeight: "700",
+                                cursor: "pointer"
+                              }}
+                            >
+                              Order Ready
+                            </button>
+                          ) : isReady ? (
+                            <div
+                              style={{
+                                height: "40px",
+                                background: "#133526",
+                                border: "1px solid #10B981",
+                                borderRadius: "6px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "11px",
+                                fontWeight: "700",
+                                color: "#10B981"
+                              }}
+                            >
+                              Ready [OK]
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                height: "40px",
+                                background: "#1A1E29",
+                                border: "1px solid #222736",
+                                borderRadius: "6px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "11px",
+                                fontWeight: "600",
+                                color: "#8B949E"
+                              }}
+                            >
+                              Pending Cook
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })
+                )}
               </div>
 
-              {/* Column 3: Ready for Pickup / Handoff */}
-              <div style={{ background: "#14171F", border: "1px solid #2A2A2A", borderRadius: "10px", padding: "16px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-                  <strong style={{ color: "#10B981", fontSize: "14px", fontWeight: "800" }}>3. READY FOR HANDOFF</strong>
-                  <span style={{ background: "#10B981", color: "#FFF", padding: "2px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: "800" }}>
-                    {kdsReady.length}
-                  </span>
-                </div>
-
-                <div style={{ display: "grid", gap: "10px" }}>
-                  {kdsReady.map((order) => (
-                    <div key={order.id} style={{ background: "#1C1B1B", border: "1px solid #10B981", borderRadius: "8px", padding: "12px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                        <strong style={{ color: "#FFF", fontSize: "14px" }}>#{order.order_number}</strong>
-                        <span style={{ color: "#10B981", fontWeight: "800", fontSize: "11px" }}>PLATED</span>
-                      </div>
-                      <div style={{ fontSize: "12px", color: "#C9D1D9", margin: "6px 0" }}>
-                        {order.items.map((it, idx) => (
-                          <div key={idx}>• {it.quantity}x {it.name}</div>
-                        ))}
-                      </div>
-                      <button
-                        onClick={() => updateOrderStatus(order.id, "COMPLETED")}
-                        style={{
-                          width: "100%",
-                          height: "36px",
-                          background: "#047857",
-                          color: "#FFF",
-                          border: 0,
-                          borderRadius: "6px",
-                          fontSize: "12px",
-                          fontWeight: "700",
-                          cursor: "pointer",
-                          marginTop: "8px"
-                        }}
-                      >
-                        {order.order_type === "DINE_IN" ? "Handed to Server ✓" : "Handed to Rider/Guest ✓"}
-                      </button>
-                    </div>
-                  ))}
-                </div>
+              {/* Kitchen Station Footer Ledger */}
+              <div
+                style={{
+                  marginTop: "16px",
+                  padding: "14px 18px",
+                  background: "#161B22",
+                  borderRadius: "10px",
+                  border: "1px solid #222736",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}
+              >
+                <span style={{ fontSize: "12px", color: "#8B949E", fontWeight: "600" }}>
+                  KDS PIPELINE: QUEUED (Pending) &rarr; COOKING (Preparing) &rarr; READY
+                </span>
+                <span style={{ fontSize: "11px", color: "#10B981", fontWeight: "700" }}>
+                  Active Tickets: {kitchenTickets.length}
+                </span>
               </div>
             </div>
           )}
@@ -2914,6 +3458,58 @@ export default function StaffDashboard({ session: initialSession }: { session: S
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Corner Toast Notification for New Orders (auto-dismisses in 5.5s) */}
+      {newOrderToast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "24px",
+            right: "24px",
+            zIndex: 9999,
+            background: "#161B22",
+            border: "1px solid #DC2626",
+            borderRadius: "8px",
+            padding: "14px 18px",
+            boxShadow: "0 6px 24px rgba(0,0,0,0.8)",
+            minWidth: "280px",
+            maxWidth: "360px",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: "12px",
+            animation: "fadeIn 0.25s ease-out"
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+              <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#DC2626" }} />
+              <strong style={{ fontSize: "13px", color: "#FFFFFF" }}>
+                NEW ORDER #ORD-{newOrderToast.order_number}
+              </strong>
+            </div>
+            <div style={{ fontSize: "11px", color: "#8B949E" }}>
+              {newOrderToast.order_type === "DINE_IN"
+                ? `Table ${newOrderToast.table_number || "STAND"}`
+                : newOrderToast.customer_name || newOrderToast.order_type} · {newOrderToast.items.length} item(s) · Rs {newOrderToast.total_amount || 0}
+            </div>
+          </div>
+          <button
+            onClick={() => setNewOrderToast(null)}
+            style={{
+              background: "transparent",
+              border: 0,
+              color: "#8B949E",
+              fontSize: "18px",
+              cursor: "pointer",
+              padding: "0 4px",
+              lineHeight: 1
+            }}
+          >
+            ×
+          </button>
         </div>
       )}
     </div>
