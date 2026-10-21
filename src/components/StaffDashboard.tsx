@@ -238,11 +238,20 @@ export default function StaffDashboard({ session: initialSession }: { session: S
     });
 
     // Notify local bridge offline database if running
-    void fetch("http://127.0.0.1:8765/counter/orders/approve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_order_id: orderId })
-    }).catch(() => {});
+    const bridgeHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("rms_bridge_token") || localStorage.getItem("bridge_token");
+      const session = localStorage.getItem("rms_staff_session") || localStorage.getItem("staff_session");
+      if (token) bridgeHeaders["X-RMS-Bridge-Token"] = token;
+      if (session) bridgeHeaders["X-RMS-Staff-Session"] = session;
+    }
+    if (bridgeHeaders["X-RMS-Bridge-Token"]) {
+      void fetch("http://127.0.0.1:8765/counter/orders/approve", {
+        method: "POST",
+        headers: bridgeHeaders,
+        body: JSON.stringify({ client_order_id: orderId })
+      }).catch(() => {});
+    }
 
     setDashboardNotice(`Order #${orderNumber} approved and sent to kitchen queue.`);
     setTimeout(() => setDashboardNotice(""), 3500);
@@ -252,9 +261,16 @@ export default function StaffDashboard({ session: initialSession }: { session: S
   async function handlePrintSlip(order: Order) {
     // 1. Try sending directly to local bridge printer service
     try {
+      const printHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      if (typeof window !== "undefined") {
+        const token = localStorage.getItem("rms_bridge_token") || localStorage.getItem("bridge_token");
+        const session = localStorage.getItem("rms_staff_session") || localStorage.getItem("staff_session");
+        if (token) printHeaders["X-RMS-Bridge-Token"] = token;
+        if (session) printHeaders["X-RMS-Staff-Session"] = session;
+      }
       const res = await fetch("http://127.0.0.1:8765/print", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: printHeaders,
         body: JSON.stringify({
           client_order_id: order.id,
           order_number: `#${order.order_number}`,
@@ -834,20 +850,28 @@ export default function StaffDashboard({ session: initialSession }: { session: S
   const qrCodeUrl = `/qrcodes/table-${selectedTable}-qr.png`;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#0D0D0D", color: "#E5E2E1", fontFamily: "Inter, sans-serif" }}>
+    <div style={{ display: "flex", height: "100vh", maxHeight: "100vh", overflow: "hidden", background: "#0D0D0D", color: "#E5E2E1", fontFamily: "Inter, sans-serif" }}>
       {/* ── LEFT SIDEBAR ── */}
       <aside
         style={{
           width: "250px",
+          height: "100vh",
+          maxHeight: "100vh",
+          position: "sticky",
+          top: 0,
+          left: 0,
           background: "#131313",
           borderRight: "1px solid #2A2A2A",
           display: "flex",
           flexDirection: "column",
-          flexShrink: 0
+          flexShrink: 0,
+          zIndex: 40,
+          overflowY: "auto",
+          scrollbarWidth: "none"
         }}
       >
         {/* Brand Banner */}
-        <div style={{ padding: "20px 16px", borderBottom: "1px solid #2A2A2A" }}>
+        <div style={{ padding: "20px 16px", borderBottom: "1px solid #2A2A2A", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div
               style={{
@@ -877,7 +901,7 @@ export default function StaffDashboard({ session: initialSession }: { session: S
         </div>
 
         {/* Navigation Tabs */}
-        <nav style={{ padding: "12px 8px", flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
+        <nav style={{ padding: "12px 8px", flex: 1, display: "flex", flexDirection: "column", gap: "4px", overflowY: "auto", scrollbarWidth: "thin" }}>
           {[
             { id: "orders", label: "Live Orders", count: orders.filter((o) => o.status !== "COMPLETED").length },
             { id: "kitchen", label: "Kitchen (KDS)", count: kdsReceived.length + kdsPreparing.length },
@@ -938,7 +962,7 @@ export default function StaffDashboard({ session: initialSession }: { session: S
         </nav>
 
         {/* Bottom Station Status & User Profile (A1) */}
-        <div style={{ padding: "12px", borderTop: "1px solid #2A2A2A" }}>
+        <div style={{ padding: "12px", borderTop: "1px solid #2A2A2A", flexShrink: 0, marginTop: "auto", background: "#131313" }}>
           <div
             style={{
               padding: "8px 10px",
@@ -1024,7 +1048,7 @@ export default function StaffDashboard({ session: initialSession }: { session: S
       </aside>
 
       {/* ── MAIN CONTENT ── */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, height: "100vh", maxHeight: "100vh", overflow: "hidden" }}>
         {/* Top Header */}
         <header
           style={{
