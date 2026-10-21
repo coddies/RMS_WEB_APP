@@ -408,11 +408,35 @@ export default function Menu() {
             <h1 id="restaurant-title">What are you craving today?</h1>
             <p>Explore the menu at <strong>{brandName}</strong> and find your next favourite.</p>
           </div>
-          {isDineIn ? (
-            <span className="menu-mode-pill">Table {tableName || "T-01"}</span>
-          ) : (
-            <span className="menu-mode-pill">Delivery &amp; pickup</span>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            {isDineIn ? (
+              <span className="menu-mode-pill">Table {tableName || "T-01"}</span>
+            ) : (
+              <span className="menu-mode-pill">Delivery &amp; pickup</span>
+            )}
+            <Link
+              href="/login"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                minHeight: "42px",
+                padding: "0 16px",
+                borderRadius: "999px",
+                background: "#1c1c1e",
+                color: "#ffffff",
+                fontSize: "0.82rem",
+                fontWeight: 700,
+                textDecoration: "none",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)"
+              }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+              </svg>
+              <span>Staff Login</span>
+            </Link>
+          </div>
         </section>
 
         <div className="menu-discovery-row">

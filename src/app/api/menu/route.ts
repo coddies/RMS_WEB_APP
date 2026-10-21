@@ -72,11 +72,76 @@ export async function GET(request: NextRequest) {
       .select("id,menu_item_id,card_style,badge_text,days_of_week,start_at,end_at,run_indefinitely")
       .eq("tenant_id", tenant.id);
 
+    const fallbackCategories = [
+      {
+        id: "cat-burgers",
+        name: "Burgers",
+        sort_order: 1,
+        menu_items: [
+          {
+            id: "item-burger-1",
+            name: "Gourmet Beef Burger",
+            description: "Juicy beef patty, melted cheddar, crisp lettuce, tomato & signature smokehouse sauce on toasted brioche",
+            price: 850,
+            image_url: "/images/food/beef-burger.jpg",
+            in_stock: true
+          }
+        ]
+      },
+      {
+        id: "cat-pizza",
+        name: "Pizza",
+        sort_order: 2,
+        menu_items: [
+          {
+            id: "item-pizza-1",
+            name: "Artisan Pepperoni Pizza",
+            description: "Hand-tossed crust, rich San Marzano tomato sauce, fresh melted mozzarella and savory pepperoni slices",
+            price: 1450,
+            image_url: "/images/food/pepperoni-pizza.jpg",
+            in_stock: true
+          }
+        ]
+      },
+      {
+        id: "cat-pasta",
+        name: "Pasta",
+        sort_order: 3,
+        menu_items: [
+          {
+            id: "item-pasta-1",
+            name: "Creamy Fettuccine Alfredo",
+            description: "Al dente pasta tossed in rich parmesan cream sauce with garlic and fresh Italian herbs",
+            price: 1150,
+            image_url: "/images/food/creamy-pasta.jpg",
+            in_stock: true
+          }
+        ]
+      },
+      {
+        id: "cat-coffee",
+        name: "Coffee & Drinks",
+        sort_order: 4,
+        menu_items: [
+          {
+            id: "item-coffee-1",
+            name: "Artisan Cappuccino",
+            description: "Double espresso pulled fresh with velvety microfoam and rich aroma",
+            price: 480,
+            image_url: "/images/food/artisan-coffee.jpg",
+            in_stock: true
+          }
+        ]
+      }
+    ];
+
+    const finalCategories = (categories && categories.length > 0) ? categories : fallbackCategories;
+
     return NextResponse.json(
       {
         tenant,
         table,
-        categories: categories ?? [],
+        categories: finalCategories,
         special_offers: specialOffers ?? []
       },
       { headers: { "Cache-Control": "no-store, max-age=0" } }
