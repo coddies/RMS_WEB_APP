@@ -74,6 +74,21 @@ export async function GET(request: NextRequest) {
 
     const fallbackCategories = [
       {
+        id: "cat-main",
+        name: "Main Course",
+        sort_order: 0,
+        menu_items: [
+          {
+            id: "item-biryani-1",
+            name: "Special Chicken Biryani",
+            description: "Traditional aromatic basmati rice cooked with succulent chicken, saffron, royal spices, and golden caramelized onions",
+            price: 450,
+            image_url: "/images/food/chicken-biryani.jpg",
+            in_stock: true
+          }
+        ]
+      },
+      {
         id: "cat-burgers",
         name: "Burgers",
         sort_order: 1,

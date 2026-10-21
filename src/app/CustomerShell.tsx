@@ -7,14 +7,13 @@ import type { ReactNode } from "react";
 type NavItem = {
   label: string;
   href: string;
-  icon: "home" | "search" | "cart" | "staff";
+  icon: "home" | "search" | "cart";
 };
 
 const items: NavItem[] = [
   { label: "Home", href: "/", icon: "home" },
   { label: "Search", href: "/#menu-search", icon: "search" },
   { label: "Cart", href: "/#customer-cart", icon: "cart" },
-  { label: "Staff Login", href: "/login", icon: "staff" },
 ];
 
 function Icon({ name }: { name: NavItem["icon"] }) {
@@ -22,7 +21,6 @@ function Icon({ name }: { name: NavItem["icon"] }) {
     home: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9M9 20v-6h6v6" /></>,
     search: <><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 5 5" /></>,
     cart: <><path d="M3 4h2l2.2 11.2a2 2 0 0 0 2 1.6h8.5a2 2 0 0 0 1.9-1.4L21 9H6" /><circle cx="10" cy="20" r="1" /><circle cx="18" cy="20" r="1" /></>,
-    staff: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></>,
   };
 
   return (
@@ -43,32 +41,11 @@ function CustomerNavigation({ active }: { active: boolean }) {
           </span>
         </Link>
         <div className="customer-top-links">
-          <Link href="/" aria-current={active ? "page" : undefined}>Home</Link>
-          <Link href="/#menu-search">Search</Link>
-          <Link href="/#customer-cart">Cart</Link>
-          <Link
-            href="/login"
-            className="customer-staff-pill"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "7px 15px",
-              borderRadius: "999px",
-              background: "#191919",
-              color: "#fff",
-              fontSize: "0.82rem",
-              fontWeight: 700,
-              textDecoration: "none",
-              marginLeft: "8px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.12)"
-            }}
-          >
-            <span style={{ width: "16px", height: "16px", display: "inline-grid", placeItems: "center" }}>
-              <Icon name="staff" />
-            </span>
-            <span>Staff Login</span>
-          </Link>
+          {items.map((item, index) => (
+            <Link key={item.label} href={item.href} aria-current={index === 0 && active ? "page" : undefined}>
+              {item.label}
+            </Link>
+          ))}
         </div>
       </nav>
 
